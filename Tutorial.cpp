@@ -58,7 +58,51 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 	VkFramebuffer framebuffer = swapchain_framebuffers[render_params.image_index];
 
 	//record (into `workspace.command_buffer`) commands that run a `render_pass` that just clears `framebuffer`:
-	refsol::Tutorial_render_record_blank_frame(rtg, render_pass, framebuffer, &workspace.command_buffer);
+	//refsol::Tutorial_render_record_blank_frame(rtg, render_pass, framebuffer, &workspace.command_buffer);
+
+	//reset the command buffer(clear old commands):
+	VK(vkResetCommandBuffer(workspace.command_buffer, 0));
+	{//begin recording
+		VkCommandBufferBeginInfo begin_info{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,	// WILL RECORD AGAIN EVEERY SUBIT
+
+		};
+		VK(vkBeginCommandBuffer(workspace.command_buffer, &begin_info));
+	}
+
+	{//render pass
+		std::array< VkClearValue, 2 > clear_values{
+
+			VkClearValue{.color{.float32{1.0f, 0.73f, 0.23f, 0.2f } } },
+			VkClearValue{.depthStencil{.depth = 1.0f, .stencil = 0 } },
+		};
+
+		VkRenderPassBeginInfo begin_info{
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+
+			.renderPass = render_pass,
+			.framebuffer = framebuffer,
+			.renderArea{ 
+				.offset = {.x = 0, .y = 0},
+				.extent = rtg.swapchain_extent,
+			},
+			.clearValueCount = uint32_t (clear_values.size()), 
+			.pClearValues = clear_values.data(),
+		};
+
+
+
+		vkCmdBeginRenderPass(workspace.command_buffer, &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+	
+		// todo: RUNPIPELINES HERE
+		
+		vkCmdEndRenderPass(workspace.command_buffer);
+	
+	}
+
+	//end recoding
+	VK(vkEndCommandBuffer(workspace.command_buffer) );
 
 	//submit `workspace.command buffer` for the GPU to run:
 	refsol::Tutorial_render_submit(rtg, render_params, workspace.command_buffer);
