@@ -2,6 +2,7 @@
 
 #include "Helpers.hpp"
 #include "refsol.hpp"
+#include "VK.hpp"
 
 static uint32_t vert_code[] =
 #include "spv/background.vert.inl"
@@ -41,13 +42,13 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_VERTEX_BIT,
 				.module = vert_module,
-				.pName = "main"
+				.pName = "main",
 			},
 			VkPipelineShaderStageCreateInfo{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
 				.module = frag_module,
-				.pName = "main"
+				.pName = "main",
 			},
 
 		};
@@ -55,12 +56,12 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 		//the view port and scissor state will be set at run time for the pipelines:
 		std::vector< VkDynamicState > dynamic_states{
 			VK_DYNAMIC_STATE_VIEWPORT,
-			VK_DYNAMIC_STATE_SCISSOR
+			VK_DYNAMIC_STATE_SCISSOR,
 		};
-		VkPipelineDynamicStageCreateInfo dynamic_state{
+		VkPipelineDynamicStateCreateInfo dynamic_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
 			.dynamicStateCount = uint32_t(dynamic_states.size()),
-			.pDynamicStates = dynamic_states.data()
+			.pDynamicStates = dynamic_states.data(),
 		};
 
 		//this pipeline will take no per-vertex inputs
@@ -75,7 +76,7 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 				.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-				.primitiveRestartEnable = VK_FALSE
+				.primitiveRestartEnable = VK_FALSE,
 		};
 
 		// THIS PIPLEIN WILL RENER TO ONE VIEW PORT AND SCISSOR RECTANGEL
@@ -98,7 +99,7 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 		};
 
 		//mu;tisampling will be disable 9one sample per pixel
-		VkPipelineMultisampleStateCreatInfo multisample_state{
+		VkPipelineMultisampleStateCreateInfo multisample_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
 			.sampleShadingEnable = VK_FALSE,
@@ -115,13 +116,13 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 
 		//there will be one color attachment with blender disabled 
 		std::array < VkPipelineColorBlendAttachmentState, 1> attachment_states{
-			VKPipelineColorBlendAttachmentState{
+			VkPipelineColorBlendAttachmentState{
 				.blendEnable = VK_FALSE,
-				.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COIMPONENT_A_BIT,
+				.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
 			},
 		};
 
-		VKPipelineColorBlendStateCreateInfo{
+		VkPipelineColorBlendStateCreateInfo color_blend_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 			.logicOpEnable = VK_FALSE,
 			.attachmentCount = uint32_t(attachment_states.size()),
@@ -133,7 +134,7 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 		//alll of the above structures get bundled together into one very large create_info: 
 		VkGraphicsPipelineCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-			.stageCount = uint32_t(stages.size());
+			.stageCount = uint32_t(stages.size()),
 			.pStages = stages.data(),
 			.pVertexInputState = &vertex_input_state,
 			.pInputAssemblyState = &input_assembly_state,
@@ -141,11 +142,11 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 			.pRasterizationState = &rasterization_state,
 			.pMultisampleState = &multisample_state,
 			.pDepthStencilState = &depth_stencil_state,
-			.pColorBlendState = &color_belnd_state,
+			.pColorBlendState = &color_blend_state,
 			.pDynamicState = &dynamic_state,
 			.layout = layout,
 			.renderPass = render_pass,
-			.subpass = subbpass,
+			.subpass = subpass,
 		};
 
 		VK(vkCreateGraphicsPipelines(rtg.device, VK_NULL_HANDLE, 1, &create_info, nullptr, &handle));
@@ -153,7 +154,7 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 
 	//modules no longer needed now that pipline ise created:
 	vkDestroyShaderModule(rtg.device, frag_module, nullptr);
-	vkdestroyshaderModule(rtg.device, vert_module, nullptr);
+	vkDestroyShaderModule(rtg.device, vert_module, nullptr);
 }
 
 void Tutorial::BackgroundPipeline::destroy(RTG& rtg) {
