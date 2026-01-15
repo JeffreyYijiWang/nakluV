@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PosColVertex.hpp"
+
 #include "RTG.hpp"
 
 struct Tutorial : RTG::Application {
@@ -44,9 +46,10 @@ struct Tutorial : RTG::Application {
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
-		//no vertex bindings (yet)
+		using Vertex = PosColVertex;
 
 		VkPipeline handle = VK_NULL_HANDLE;
+		
 		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
 		void destroy(RTG&);
 	} lines_pipeline;
