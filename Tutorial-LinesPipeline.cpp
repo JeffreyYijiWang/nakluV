@@ -4,37 +4,32 @@
 #include "VK.hpp"
 
 static uint32_t vert_code[] =
-#include "spv/background.vert.inl"
+#include "spv/lines.vert.inl"
 ;
 
 static uint32_t frag_code[] =
-#include "spv/background.frag.inl"
+#include "spv/lines.frag.inl"
 ;
 
-void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
+void Tutorial::LinesPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
 	VkShaderModule vert_module = rtg.helpers.create_shader_module(vert_code);
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
 	{ //create pipline layout
-		VkPushConstantRange range{
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.offset = 0,
-			.size = sizeof(Push),
-		};
 
 		VkPipelineLayoutCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = 0,
 			.pSetLayouts = nullptr,
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = &range,
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr,
 		};
 
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
 	}
 
 	{ //create pipeline:
-		
+
 	  //shader code for vertex and fragment pipleine states:
 		std::array< VkPipelineShaderStageCreateInfo, 2 > stages{
 			VkPipelineShaderStageCreateInfo{
@@ -63,18 +58,10 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 			.pDynamicStates = dynamic_states.data(),
 		};
 
-		//this pipeline will take no per-vertex inputs
-		VkPipelineVertexInputStateCreateInfo vertex_input_state{
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-			.vertexBindingDescriptionCount = 0,
-			.pVertexBindingDescriptions = nullptr,
-			.vertexAttributeDescriptionCount = 0,
-			.pVertexAttributeDescriptions = nullptr,
-		};
-		// this pipeline will draw triangles
+		// this pipeline will draw lines
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-				.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+				.topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
 				.primitiveRestartEnable = VK_FALSE,
 		};
 
@@ -97,17 +84,19 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 			.lineWidth = 1.0f,
 		};
 
-		//mu;tisampling will be disable 9one sample per pixel
+		//mu;tisampling will be disable one sample per pixel
 		VkPipelineMultisampleStateCreateInfo multisample_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
 			.sampleShadingEnable = VK_FALSE,
 		};
 
-		//depth and stencil tests will be disabled: 
+		//depth test will be less, and the stencil test will be disabled 
 		VkPipelineDepthStencilStateCreateInfo depth_stencil_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-			.depthTestEnable = VK_FALSE,
+			.depthTestEnable = VK_TRUE,
+			.depthWriteEnable = VK_TRUE,
+			.depthCompareOp = VK_COMPARE_OP_LESS, 
 			.depthBoundsTestEnable = VK_FALSE,
 			.stencilTestEnable = VK_FALSE,
 		};
@@ -135,7 +124,7 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
 			.stageCount = uint32_t(stages.size()),
 			.pStages = stages.data(),
-			.pVertexInputState = &vertex_input_state,
+			.pVertexInputState = &Vertex::array_input_state,
 			.pInputAssemblyState = &input_assembly_state,
 			.pViewportState = &viewport_state,
 			.pRasterizationState = &rasterization_state,
@@ -156,7 +145,7 @@ void Tutorial::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, ui
 	vkDestroyShaderModule(rtg.device, vert_module, nullptr);
 }
 
-void Tutorial::BackgroundPipeline::destroy(RTG& rtg) {
+void Tutorial::LinesPipeline::destroy(RTG& rtg) {
 	if (layout != VK_NULL_HANDLE) {
 		vkDestroyPipelineLayout(rtg.device, layout, nullptr);
 		handle = VK_NULL_HANDLE;
