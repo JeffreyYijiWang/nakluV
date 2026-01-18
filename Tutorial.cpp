@@ -238,7 +238,7 @@ void Tutorial::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
 	//make ann 'x';
-	lines_vertices.clear();
+	/*lines_vertices.clear();
 	lines_vertices.reserve(4);
 	lines_vertices.emplace_back(PosColVertex{
 		.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f },
@@ -256,8 +256,44 @@ void Tutorial::update(float dt) {
 		.Position{.x = 1.0f, .y = -1.0f, .z = 0.0f },
 		.Color{.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff }
 	});
-	assert(lines_vertices.size() == 4);
+	assert(lines_vertices.size() == 4);*/
 
+	{//make some crossing lines at differnt depths:
+		lines_vertices.clear();
+		constexpr size_t count = 2 * 30 + 2 * 30;
+		lines_vertices.reserve(count);
+
+		//hoirizontal lines at z = 0.5 :
+		for (uint32_t i = 0; i < 30;++i) {
+			float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{ .x = -1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = 1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
+				});
+
+		}
+
+		//vetical lines at z = 0.0 (near) through 1.0 far:
+		for (uint32_t i = 0; i < 30;++i) {
+			float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
+			float z = (i + 0.5f) / 30.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = -1.0f, .z = z},
+				.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = 1.0f, .z = z},
+				.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
+				});
+
+		}
+		assert(lines_vertices.size() == count);
+
+	}
 }
 
 
