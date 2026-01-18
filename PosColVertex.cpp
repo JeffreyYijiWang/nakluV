@@ -25,7 +25,7 @@ static std::array< VkVertexInputAttributeDescription, 2 > attributes{
 	},
 };
 
-const VkPipelineVertexInputStateCreateInfo PosColVertex::array_in_put_state{
+const VkPipelineVertexInputStateCreateInfo PosColVertex::array_input_state{
 	.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
 	.vertexBindingDescriptionCount = uint32_t(bindings.size()),
 	.pVertexBindingDescriptions = bindings.data(),

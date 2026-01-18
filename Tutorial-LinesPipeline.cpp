@@ -151,7 +151,7 @@ void Tutorial::LinesPipeline::destroy(RTG& rtg) {
 		handle = VK_NULL_HANDLE;
 	}
 
-	if (handle 1 = VK_NULL_HANDLE) {
+	if (handle != VK_NULL_HANDLE) {
 		vkDestroyPipeline(rtg.device, handle, nullptr);
 		handle = VK_NULL_HANDLE;
 	}

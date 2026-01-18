@@ -85,8 +85,8 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 	}
 
 	if (!lines_vertices.empty()) { //upload lines vertice:
-		.//[re-]allocate lines buffers is need;
-			size_t needed_bytes = liness_vertices.size() * sizeof(lines_vertices[0]);
+		//[re-]allocate lines buffers is need;
+		size_t needed_bytes = lines_vertices.size() * sizeof(lines_vertices[0]);
 		if (workspace.lines_vertices_src.handle == VK_NULL_HANDLE ||
 			workspace.lines_vertices_src.size < needed_bytes) {
 			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
@@ -107,7 +107,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 			workspace.lines_vertices = rtg.helpers.create_buffer(
 				new_bytes,
-				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT //going ot use as a vertex buffer , also goin to have GPU into this memory
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, //going ot use as a vertex buffer , also goin to have GPU into this memory
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //GPU- local memory 
 				Helpers::Unmapped // don;t get a pointer to the memory
 			);
@@ -127,7 +127,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		VkBufferCopy copy_region{
 			.srcOffset = 0,
 			.dstOffset = 0,
-			.size + needed_bytes,
+			.size = needed_bytes,
 		};
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.lines_vertices_src.handle, workspace.lines_vertices.handle, 1, &copy_region);
 	}
@@ -210,14 +210,14 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
 
 			{//use lines_vertice (offset 0) as vertex buffer bindign 0:
-				std::array < VkBuffer, 1> vertex_buffer{ workspace.lines_vertices.handle };
-				std::array <VkDeviceSize, 1> offset{ 0 };
-				vkCmdBindVertexbuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+				std::array < VkBuffer, 1> vertex_buffers{ workspace.lines_vertices.handle };
+				std::array <VkDeviceSize, 1> offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
 		
 			}
 
 			//draw line vertice
-			vkCmdDraw(workspace.command_buffer, uint32_t(linew_vertices.size()), 1, 0, 0);
+			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
 		}
 
 
@@ -235,7 +235,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 
 void Tutorial::update(float dt) {
-	time = std::fmod(time + df, 60.0f);
+	time = std::fmod(time + dt, 60.0f);
 
 	//make ann 'x';
 	lines_vertices.clear();
