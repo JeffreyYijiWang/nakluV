@@ -34,6 +34,13 @@ Tutorial::~Tutorial() {
 
 	for (Workspace &workspace : workspaces) {
 		refsol::Tutorial_destructor_workspace(rtg, command_pool, &workspace.command_buffer);
+
+		if (workspace.lines_vertices_src.handle != VK_NULL_HANDLE) {
+			rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices_src));
+		}
+		if (workspace.lines_vertices.handle != VK_NULL_HANDLE) {
+			rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices));
+		}
 	}
 	workspaces.clear();
 
@@ -75,6 +82,61 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 		};
 		VK(vkBeginCommandBuffer(workspace.command_buffer, &begin_info));
+	}
+
+	if (!lines_vertices.empty()) { //upload lines vertice:
+		.//[re-]allocate lines buffers is need;
+			size_t needed_bytes = liness_vertices.size() * sizeof(lines_vertices[0]);
+		if (workspace.lines_vertices_src.handle == VK_NULL_HANDLE ||
+			workspace.lines_vertices_src.size < needed_bytes) {
+			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
+			size_t new_bytes = ((needed_bytes + 4096) / 4096) * 4096;
+			if (workspace.lines_vertices_src.handle) {
+				rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices_src));
+			}
+			if (workspace.lines_vertices.handle) {
+				rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices));
+			}
+			
+			workspace.lines_vertices_src = rtg.helpers.create_buffer(
+				new_bytes,
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT, //GOING TO HAVE gpu COPY FROM THIS MEMORY
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, //HOST-VISIBLE MORY, COHERENT(NO SPECIAL SYN NEEDED)
+				Helpers::Mapped //get a pointer to the memory
+			);
+
+			workspace.lines_vertices = rtg.helpers.create_buffer(
+				new_bytes,
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT //going ot use as a vertex buffer , also goin to have GPU into this memory
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //GPU- local memory 
+				Helpers::Unmapped // don;t get a pointer to the memory
+			);
+
+
+			std::cout << "Re-allocationed lines buffers to " << new_bytes << " bytes." << std::endl;
+		}
+		assert(workspace.lines_vertices_src.size == workspace.lines_vertices.size);
+		assert(workspace.lines_vertices_src.size >= needed_bytes);
+
+		//host-side copy int lines)vertices-stc;
+		assert(workspace.lines_vertices_src.allocation.mapped);
+		std::memcpy(workspace.lines_vertices_src.allocation.data(), lines_vertices.data(), needed_bytes);
+		
+		//GPU doing host to GPu copy 
+		//decice -size copy form lines)_vertical _src -> lines_vertices 
+		VkBufferCopy copy_region{
+			.srcOffset = 0,
+			.dstOffset = 0,
+			.size + needed_bytes,
+		};
+		vkCmdCopyBuffer(workspace.command_buffer, workspace.lines_vertices_src.handle, workspace.lines_vertices.handle, 1, &copy_region);
+	}
+
+
+	{//memory barrier to make sure copies complete before rendign happens:
+		VkMemoryBarrier memory_barrier{
+
+		};
 	}
 
 	{//render pass
@@ -146,7 +208,29 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 
 void Tutorial::update(float dt) {
-	time += dt;
+	time = std::fmod(time + df, 60.0f);
+
+	//make ann 'x';
+	lines_vertices.clear();
+	lines_vertices.reserve(4);
+	lines_vertices.emplace_back(PosColVertex{
+		.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f },
+		.Color{ .r = 0xff, .g = 0xff, .b= 0xff, .a = 0xff }
+	});
+	lines_vertices.emplace_back(PosColVertex{
+		.Position{.x = 1.0f, .y = 1.0f, .z = 0.0f },
+		.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff }
+	});
+	lines_vertices.emplace_back(PosColVertex{
+		.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f },
+		.Color{.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff }
+	});
+	lines_vertices.emplace_back(PosColVertex{
+		.Position{.x = 1.0f, .y = -1.0f, .z = 0.0f },
+		.Color{.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff }
+	});
+	assert(lines_vertices.size() == 4);
+
 }
 
 

@@ -59,8 +59,12 @@ struct Tutorial : RTG::Application {
 
 	//workspaces hold per-render resources:
 	struct Workspace {
-		VkCommandBuffer command_buffer = VK_NULL_HANDLE; //from the command pool above; reset at the start of every render.
+		VkCommandBuffer command_buffer = VK_NULL_HANDLE; //from the command pool above;
+		//reset at the start of every render.
 
+		//location of lines data: (  streamed i.e copied over to GPU per-frame)
+		Helpers::AllocatedBuffer lines_vertices_src; //host cherent; mapped
+		Helpers::AllocatedBuffer lines_vertices; // device -local
 	};
 	std::vector< Workspace > workspaces;
 
@@ -85,6 +89,8 @@ struct Tutorial : RTG::Application {
 	virtual void on_input(InputEvent const &) override;
 
 	float time = 0.0f;
+
+	std::vector < LinesPipeline::Vertex > lines_vertices;
 	//--------------------------------------------------------------------
 	//Rendering function, uses all the resources above to queue work to draw a frame:
 
