@@ -135,8 +135,19 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 	{//memory barrier to make sure copies complete before rendign happens:
 		VkMemoryBarrier memory_barrier{
-
+			.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+			.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+			.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
 		};
+
+		vkCmdPipelineBarrier(workspace.command_buffer,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, //srcStageMask
+			VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStagemask
+			0, //dependency Flags
+			1, &memory_barrier, //mmoryBarriers (count, data)
+			0, nullptr, // bufferMomroyBarrier( count, data)
+			0, nullptr  // imageMemoryBarrier(count, data)
+		);
 	}
 
 	{//render pass
@@ -194,6 +205,22 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			}
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
+
+		{//draw with the lines pipeline;
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
+
+			{//use lines_vertice (offset 0) as vertex buffer bindign 0:
+				std::array < VkBuffer, 1> vertex_buffer{ workspace.lines_vertices.handle };
+				std::array <VkDeviceSize, 1> offset{ 0 };
+				vkCmdBindVertexbuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+		
+			}
+
+			//draw line vertice
+			vkCmdDraw(workspace.command_buffer, uint32_t(linew_vertices.size()), 1, 0, 0);
+		}
+
+
 		
 		vkCmdEndRenderPass(workspace.command_buffer);
 	
