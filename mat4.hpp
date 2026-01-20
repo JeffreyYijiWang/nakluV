@@ -97,7 +97,7 @@ inline mat4 look_at(
 	up_z *= inv_up_len;
 
 	//computer right vecto ras in x up
-	float right_x = in_x * up_z - in_z *up_y;
+	float right_x = in_y * up_z - in_z *up_y;
 	float right_y = in_z * up_x - in_x * up_z;
 	float right_z = in_x * up_y - in_y * up_x;
 
