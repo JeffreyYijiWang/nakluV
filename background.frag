@@ -22,6 +22,6 @@ void main() {
 	
 	
 	//= vec4(fract(position.x + time), position.y, 0.0, 1.0);
-	outColor = vec4(position.x, position.y,  0.0, 1.0);
+	outColor = vec4(0.0, 0.0,  0.0, 1.0);
 	//vec4(fract(gl_FragCoord.x/100), gl_FragCoord.y/400, 0.2, 1.0);
 }
