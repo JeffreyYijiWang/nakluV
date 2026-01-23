@@ -15,6 +15,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 
 	background_pipeline.create(rtg, render_pass, 0);
 	lines_pipeline.create(rtg, render_pass, 0);
+	objects_pipeline.create(rtg, render_pass, 0);
 
 	{//create descriptor pool:
 		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); //for easier to read counting
@@ -97,6 +98,138 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 		}
 	}
 
+	{//create object vertices 
+		std::vector < PosNorTexVertex > vertices;
+
+		{ // A [-1,1] x [-1, 1 x {0} quadrilater:
+			plane_vertices.first = uint32_t(vertices.size());
+			vertices.emplace_back(PosNorTexVertex{
+				.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f},
+				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+				.TexCoord{.s = 0.0f, .t = 0.0f },
+				});
+
+			vertices.emplace_back(PosNorTexVertex{
+				.Position{.x =1.0f, .y = -1.0f, .z = 0.0f},
+				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+				.TexCoord{.s = 1.0f, .t = 0.0f },
+				});
+
+			vertices.emplace_back(PosNorTexVertex{
+				.Position{.x = -11.0f, .y = 1.0f, .z = 0.0f},
+				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+				.TexCoord{.s = 0.0f, .t = 1.0f },
+				});
+			vertices.emplace_back(PosNorTexVertex{
+				.Position{.x = 1.0f, .y = 1.0f, .z = 0.0f},
+				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+				.TexCoord{.s = 1.0f, .t = 1.0f },
+				});
+			vertices.emplace_back(PosNorTexVertex{
+				.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f},
+				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+				.TexCoord{.s = 0.0f, .t = 1.0f },
+				});
+			vertices.emplace_back(PosNorTexVertex{
+				.Position{.x = 1.0f, .y = -1.0f, .z = 0.0f},
+				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+				.TexCoord{.s = 1.0f, .t = 0.0f },
+				});
+
+			plane_vertices.count = uint32_t(vertices.size()) - plane_vertices.first;
+		}
+
+		{//a torus 
+			torus_vertices.first = uint32_t(vertices.size());
+
+			// will parmeteriz with (u,v ) where;
+			// -u is angle aroudn the main axis (+z)
+			// - v is angle aroudn the tube
+
+			constexpr float R1 = 0.75f; // main radius
+			constexpr float R2 = 0.15f; // tube raidu
+
+			constexpr uint32_t U_STEPS = 20;
+			constexpr uint32_t V_STEPS = 16; 
+
+			//texture repreats aroudn the torus:
+			constexpr float V_REPEATS = 2.0f;
+			constexpr float U_REPEATS = int(V_REPEATS / R2 * R1 + 0.999f);
+
+			//approcimaty square , rounded up
+
+			auto emplace_vertex = [&](uint32_t ui, uint32_t vi) {
+				//convert steps to angles:
+				// doing the mod since trig on 2M_PI may not exacty match 0
+				float ua = (ui % U_STEPS) / float(U_STEPS) * 2.0f * float(M_PI);
+				float va = (vi % V_STEPS) / float(V_STEPS) * 2.0f * float(M_PI);
+
+				vertices.emplace_back(PosNorTexVertex{
+					.Position{
+						.x = (R1 + R2 * std::cos(va)) * std::cos(ua),
+						.y = (R1 + R2 * std::cos(va)) * std::sin(ua),
+						.z = R2 * std::sin(va),
+					},
+					.Normal {
+						.x = std::cos(va) * std::cos(ua),
+						.y = std::cos(va) * std::sin(ua),
+						.z = std::sin(va),
+					},
+					.TexCoord{
+						.s = ui / float(U_STEPS) * U_REPEATS,
+						.t = vi / float(V_STEPS) * V_REPEATS,
+					},
+				});
+			};
+
+			for (uint32_t ui = 0; ui < U_STEPS; ++ui) {
+				for (uint32_t vi = 0; vi < V_STEPS; ++vi) {
+					emplace_vertex(ui, vi);
+					emplace_vertex(ui+1, vi);
+					emplace_vertex(ui, vi+1);
+
+					emplace_vertex(ui, vi+1);
+					emplace_vertex(ui+1, vi);
+					emplace_vertex(ui+1, vi+1);
+				}
+			}
+			torus_vertices.count = uint32_t(vertices.size()) - torus_vertices.first;
+
+		}
+		
+		//A single traingle:
+
+		vertices.emplace_back(PosNorTexVertex{
+			.Position{.x = 0.0f, .y = 0.0f, .z = 0.0f},
+			.Normal{ .x = 0.0f, .y = 0.0f, .z = 1.0f},
+			.TexCoord{.s = 0.0f, .t = 0.0f},
+			});
+
+		vertices.emplace_back(PosNorTexVertex{
+			.Position{.x = 1.0f, .y = 0.0f, .z = 0.0f},
+			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f},
+			.TexCoord{.s = 1.0f, .t = 0.0f},
+			});
+
+		vertices.emplace_back(PosNorTexVertex{
+			.Position{.x = 0.0f, .y = 1.0f, .z = 0.0f},
+			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f},
+			.TexCoord{.s = 0.0f, .t = 1.0f},
+		});
+
+		size_t bytes = vertices.size() * sizeof(vertices[0]);
+
+		object_vertices = rtg.helpers.create_buffer(
+			bytes,
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			Helpers::Unmapped
+		);
+
+		//copy data to buffer
+
+		rtg.helpers.transfer_to_buffer(vertices.data(), bytes, object_vertices);
+	}
 
 }
 
@@ -106,6 +239,8 @@ Tutorial::~Tutorial() {
 	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS) {
 		std::cerr << "Failed to vkDeviceWaitIdle in Tutorial::~Tutorial [" << string_VkResult(result) << "]; continuing anyway." << std::endl;
 	}
+
+	rtg.helpers.destroy_buffer(std::move(object_vertices));
 
 	if (swapchain_depth_image.handle != VK_NULL_HANDLE) {
 		destroy_framebuffers();
@@ -127,6 +262,8 @@ Tutorial::~Tutorial() {
 			rtg.helpers.destroy_buffer(std::move(workspace.Camera));
 		}
 	}
+
+
 	workspaces.clear();
 
 	if (descriptor_pool) {
@@ -136,6 +273,7 @@ Tutorial::~Tutorial() {
 	}
 	background_pipeline.destroy(rtg);
 	lines_pipeline.destroy(rtg);
+	objects_pipeline.destroy(rtg);
 
 	refsol::Tutorial_destructor(rtg, &render_pass, &command_pool);
 }
@@ -345,6 +483,23 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
 		}
 
+		{//draw with the object pipeline:
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
+			
+			{//use object vertices (offset 0 ) as vertex buffer binging 0:
+				
+				std::array < VkBuffer, 1 > vertex_buffers{ object_vertices.handle };
+				std::array < VkDeviceSize, 1 > offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+
+			}
+
+			 //camera descriptor set is stil bounde (!)
+
+			//draw all vertices :
+			vkCmdDraw(workspace.command_buffer, uint32_t(object_vertices.size / sizeof(ObjectsPipeline::Vertex)), 1, 0, 0);
+		}
+
 
 		
 		vkCmdEndRenderPass(workspace.command_buffer);
@@ -377,160 +532,160 @@ void Tutorial::update(float dt) {
 
 	}
 
-	//https://mathworld.wolfram.com/Helicoid.html
-	{
-		lines_vertices.clear();
+	////https://mathworld.wolfram.com/Helicoid.html
+	//{ //helixoid 
+	//	lines_vertices.clear();
 
-		//tessellation:
-		constexpr uint32_t U_STEPS = 70;   //radial samples
-		constexpr uint32_t V_STEPS = 80;  //angular samples
-		constexpr float U_MAX = 1.0f;
+	//	//tessellation:
+	//	constexpr uint32_t U_STEPS = 70;   //radial samples
+	//	constexpr uint32_t V_STEPS = 80;  //angular samples
+	//	constexpr float U_MAX = 1.0f;
 
-		//how many turns:
-		constexpr float TURNS = 2.3f;
-		const float v_min = 0.0f;
-		const float v_max = 2.0f * float(M_PI) * TURNS;
+	//	//how many turns:
+	//	constexpr float TURNS = 2.3f;
+	//	const float v_min = 0.0f;
+	//	const float v_max = 2.0f * float(M_PI) * TURNS;
 
-		//pitch control
-		constexpr float c = 0.90f;
-		const float z_min = c * v_min;
-		const float z_max = c * v_max;
-		const float inv_z_range = 1.0f / (z_max - z_min);
+	//	//pitch control
+	//	constexpr float c = 0.90f;
+	//	const float z_min = c * v_min;
+	//	const float z_max = c * v_max;
+	//	const float inv_z_range = 1.0f / (z_max - z_min);
 
-		
-		const size_t v_dir_segments = size_t(U_STEPS + 1) * size_t(V_STEPS);
-		const size_t u_dir_segments = size_t(V_STEPS + 1) * size_t(U_STEPS);
-		const size_t total_vertices = 2 * (v_dir_segments + u_dir_segments);
-		lines_vertices.reserve(total_vertices);
+	//	
+	//	const size_t v_dir_segments = size_t(U_STEPS + 1) * size_t(V_STEPS);
+	//	const size_t u_dir_segments = size_t(V_STEPS + 1) * size_t(U_STEPS);
+	//	const size_t total_vertices = 2 * (v_dir_segments + u_dir_segments);
+	//	lines_vertices.reserve(total_vertices);
 
-		//smooth fade
-		auto smoothstep = [](float e0, float e1, float x) {
-			x = (x - e0) / (e1 - e0);
-			if (x < 0.0f) x = 0.0f;
-			if (x > 1.0f) x = 1.0f;
-			return x * x * (3.0f - 2.0f * x);
-			};
+	//	//smooth fade
+	//	auto smoothstep = [](float e0, float e1, float x) {
+	//		x = (x - e0) / (e1 - e0);
+	//		if (x < 0.0f) x = 0.0f;
+	//		if (x > 1.0f) x = 1.0f;
+	//		return x * x * (3.0f - 2.0f * x);
+	//		};
 
-		auto shade_to_black_floor = [](uint8_t c, float k, float floor_k) -> uint8_t {
-			float kk = floor_k + (1.0f - floor_k) * k;
-			float cf = float(c) * kk;
-			if (cf < 0.0f) cf = 0.0f;
-			if (cf > 255.0f) cf = 255.0f;
-			return uint8_t(cf);
-			};
-
-
-		auto push_line = [&](float ax, float ay, float az,
-			float bx, float by, float bz,
-			uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-
-				lines_vertices.emplace_back(PosColVertex{
-					.Position{.x = ax, .y = ay, .z = az },
-					.Color{.r = r, .g = g, .b = b, .a = a },
-					});
-				lines_vertices.emplace_back(PosColVertex{
-					.Position{.x = bx, .y = by, .z = bz },
-					.Color{.r = r, .g = g, .b = b, .a = a },
-					});
-			};
-
-		//v-direction lines 
-		for (uint32_t iu = 0; iu <= U_STEPS; ++iu) {
-			const float u = (float(iu) / float(U_STEPS)) * U_MAX;
-
-			//simple color cue by radius:
-			const float u01 = (U_MAX > 0.0f) ? (u / U_MAX) : 0.0f;
-			const uint8_t cr = uint8_t(0x40 + (0xBF * (1.0f - u01)));
-			const uint8_t cg = 0x80;
-			const uint8_t cb = 0xFF;
-
-			for (uint32_t iv = 0; iv < V_STEPS; ++iv) {
-				const float t0 = float(iv) / float(V_STEPS);
-				const float t1 = float(iv + 1) / float(V_STEPS);
-				const float v0 = v_min + (v_max - v_min) * t0;
-				const float v1 = v_min + (v_max - v_min) * t1;
-
-				//p0:
-				const float x0 = 1.0f * u * std::cos(v0);
-				const float y0 = 1.0f * u * std::sin(v0);
-				const float z0 = (c * v0 - z_min) * inv_z_range; 
-
-				//p1:
-				const float x1 = 1.0f * u * std::cos(v1);
-				const float y1 = 1.0f * u * std::sin(v1);
-				const float z1 = (c * v1 - z_min) * inv_z_range; 
-
-				float v_mid = 0.5f * (v0 + v1);
-				float z_mid01 = (c * v_mid - z_min) * inv_z_range; 
-
-		
-				float t2 = z_mid01;
-				const float edge = 0.25f;
-				float fade_in = smoothstep(0.0f, edge, t2);
-				float fade_out = 1.0f - smoothstep(1.0f - edge, 1.0f, t2);
-				float fade = fade_in * fade_out; // 0..1
+	//	auto shade_to_black_floor = [](uint8_t c, float k, float floor_k) -> uint8_t {
+	//		float kk = floor_k + (1.0f - floor_k) * k;
+	//		float cf = float(c) * kk;
+	//		if (cf < 0.0f) cf = 0.0f;
+	//		if (cf > 255.0f) cf = 255.0f;
+	//		return uint8_t(cf);
+	//		};
 
 
-				const float floor_k = 0.10f; 
-				uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
-				uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
-				uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
+	//	auto push_line = [&](float ax, float ay, float az,
+	//		float bx, float by, float bz,
+	//		uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 
-				push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
+	//			lines_vertices.emplace_back(PosColVertex{
+	//				.Position{.x = ax, .y = ay, .z = az },
+	//				.Color{.r = r, .g = g, .b = b, .a = a },
+	//				});
+	//			lines_vertices.emplace_back(PosColVertex{
+	//				.Position{.x = bx, .y = by, .z = bz },
+	//				.Color{.r = r, .g = g, .b = b, .a = a },
+	//				});
+	//		};
 
-			}
-		}
+	//	//v-direction lines 
+	//	for (uint32_t iu = 0; iu <= U_STEPS; ++iu) {
+	//		const float u = (float(iu) / float(U_STEPS)) * U_MAX;
 
-		
-		for (uint32_t iv = 0; iv <= V_STEPS; ++iv) {
-			const float t = float(iv) / float(V_STEPS);
-			const float v = v_min + (v_max - v_min) * t;
+	//		//simple color cue by radius:
+	//		const float u01 = (U_MAX > 0.0f) ? (u / U_MAX) : 0.0f;
+	//		const uint8_t cr = uint8_t(0x40 + (0xBF * (1.0f - u01)));
+	//		const uint8_t cg = 0x80;
+	//		const uint8_t cb = 0xFF;
 
-			const float wave_speed = 2.0f; // how fast 
-			const float wave_freq = 3.0f;   // number of ripples 
-			const float wave_amp = 0.20f;  // radial modulation strength
+	//		for (uint32_t iv = 0; iv < V_STEPS; ++iv) {
+	//			const float t0 = float(iv) / float(V_STEPS);
+	//			const float t1 = float(iv + 1) / float(V_STEPS);
+	//			const float v0 = v_min + (v_max - v_min) * t0;
+	//			const float v1 = v_min + (v_max - v_min) * t1;
 
-			const float wave = 1.0f + wave_amp * std::sin(wave_freq * v - wave_speed * time);
+	//			//p0:
+	//			const float x0 = 1.0f * u * std::cos(v0);
+	//			const float y0 = 1.0f * u * std::sin(v0);
+	//			const float z0 = (c * v0 - z_min) * inv_z_range; 
 
-			const uint8_t cr = 0xFF;
-			const uint8_t cg = uint8_t(0x60 + 0x80 * std::sin(v));
-			const uint8_t cb = 0x20;
+	//			//p1:
+	//			const float x1 = 1.0f * u * std::cos(v1);
+	//			const float y1 = 1.0f * u * std::sin(v1);
+	//			const float z1 = (c * v1 - z_min) * inv_z_range; 
 
-			for (uint32_t iu = 0; iu < U_STEPS; ++iu) {
-				const float u0 = (float(iu) / float(U_STEPS)) * U_MAX;
-				const float u1 = (float(iu + 1) / float(U_STEPS)) * U_MAX;
+	//			float v_mid = 0.5f * (v0 + v1);
+	//			float z_mid01 = (c * v_mid - z_min) * inv_z_range; 
 
-				//p0: red-yelo lines coming out of the cone 
+	//	
+	//			float t2 = z_mid01;
+	//			const float edge = 0.25f;
+	//			float fade_in = smoothstep(0.0f, edge, t2);
+	//			float fade_out = 1.0f - smoothstep(1.0f - edge, 1.0f, t2);
+	//			float fade = fade_in * fade_out; // 0..1
 
-				const float r0 = 1.4f * u0 * wave;
-				const float x0 = r0 * std::cos(v);
-				const float y0 = r0 * std::sin(v);
+
+	//			const float floor_k = 0.10f; 
+	//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
+	//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
+	//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
+
+	//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
+
+	//		}
+	//	}
+
+	//	
+	//	for (uint32_t iv = 0; iv <= V_STEPS; ++iv) {
+	//		const float t = float(iv) / float(V_STEPS);
+	//		const float v = v_min + (v_max - v_min) * t;
+
+	//		const float wave_speed = 2.0f; // how fast 
+	//		const float wave_freq = 3.0f;   // number of ripples 
+	//		const float wave_amp = 0.20f;  // radial modulation strength
+
+	//		const float wave = 1.0f + wave_amp * std::sin(wave_freq * v - wave_speed * time);
+
+	//		const uint8_t cr = 0xFF;
+	//		const uint8_t cg = uint8_t(0x60 + 0x80 * std::sin(v));
+	//		const uint8_t cb = 0x20;
+
+	//		for (uint32_t iu = 0; iu < U_STEPS; ++iu) {
+	//			const float u0 = (float(iu) / float(U_STEPS)) * U_MAX;
+	//			const float u1 = (float(iu + 1) / float(U_STEPS)) * U_MAX;
+
+	//			//p0: red-yelo lines coming out of the cone 
+
+	//			const float r0 = 1.4f * u0 * wave;
+	//			const float x0 = r0 * std::cos(v);
+	//			const float y0 = r0 * std::sin(v);
 
 
-				const float z0 = (c * v - z_min) * inv_z_range;
+	//			const float z0 = (c * v - z_min) * inv_z_range;
 
-				//p1:
-				const float x1 = r0 * u1 * std::cos(v);
-				const float y1 = r0 * u1 * std::sin(v);
-				const float z1 = (c * v - z_min) * inv_z_range;
+	//			//p1:
+	//			const float x1 = r0 * u1 * std::cos(v);
+	//			const float y1 = r0 * u1 * std::sin(v);
+	//			const float z1 = (c * v - z_min) * inv_z_range;
 
-				float t_fade = z0;
-				const float edge1 = 0.15f;
-				float fade_in = smoothstep(0.0f, edge1, t_fade);
-				float fade_out = 1.0f - smoothstep(1.0f - edge1, 1.0f, t_fade);
-				float fade = fade_in * fade_out;
+	//			float t_fade = z0;
+	//			const float edge1 = 0.15f;
+	//			float fade_in = smoothstep(0.0f, edge1, t_fade);
+	//			float fade_out = 1.0f - smoothstep(1.0f - edge1, 1.0f, t_fade);
+	//			float fade = fade_in * fade_out;
 
-				const float floor_k = 0.25f;
-				uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
-				uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
-				uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
+	//			const float floor_k = 0.25f;
+	//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
+	//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
+	//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
 
-				push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
-			}
-		}
+	//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
+	//		}
+	//	}
 
-		assert(lines_vertices.size() == total_vertices);
-	}
+	//	assert(lines_vertices.size() == total_vertices);
+	//}
 
 	{//make some crossing lines at differnt depths:
 		//lines_vertices.clear();

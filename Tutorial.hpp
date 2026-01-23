@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PosColVertex.hpp"
+#include "PosNorTexVertex.hpp"
 #include "mat4.hpp"
 #include "RTG.hpp"
 
@@ -63,6 +64,29 @@ struct Tutorial : RTG::Application {
 		void destroy(RTG&);
 	} lines_pipeline;
 
+
+	struct ObjectsPipeline {
+
+		// descriptor set layout 
+		VkDescriptorSetLayout set0_Camera = VK_NULL_HANDLE;
+
+		// types fro descriptors:
+		using Camera = LinesPipeline::Camera;
+
+		// no push constnat s
+
+		VkPipelineLayout layout = VK_NULL_HANDLE;
+
+		using Vertex = PosNorTexVertex;
+
+		VkPipeline handle = VK_NULL_HANDLE;
+
+		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
+		void destroy(RTG&);
+
+
+	}objects_pipeline;
+
 	//pools from which per-workspace things are allocated:
 	VkCommandPool command_pool = VK_NULL_HANDLE;
 	VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
@@ -86,7 +110,13 @@ struct Tutorial : RTG::Application {
 
 	//-------------------------------------------------------------------
 	//static scene resources:
-
+	Helpers::AllocatedBuffer object_vertices;
+	struct ObjectVertices {
+		uint32_t first = 0;
+		uint32_t count = 0;
+	};
+	ObjectVertices plane_vertices;
+	ObjectVertices torus_vertices;
 	//--------------------------------------------------------------------
 	//Resources that change when the swapchain is resized:
 
