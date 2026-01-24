@@ -532,195 +532,40 @@ void Tutorial::update(float dt) {
 
 	}
 
-	////https://mathworld.wolfram.com/Helicoid.html
-	//{ //helixoid 
-	//	lines_vertices.clear();
-
-	//	//tessellation:
-	//	constexpr uint32_t U_STEPS = 70;   //radial samples
-	//	constexpr uint32_t V_STEPS = 80;  //angular samples
-	//	constexpr float U_MAX = 1.0f;
-
-	//	//how many turns:
-	//	constexpr float TURNS = 2.3f;
-	//	const float v_min = 0.0f;
-	//	const float v_max = 2.0f * float(M_PI) * TURNS;
-
-	//	//pitch control
-	//	constexpr float c = 0.90f;
-	//	const float z_min = c * v_min;
-	//	const float z_max = c * v_max;
-	//	const float inv_z_range = 1.0f / (z_max - z_min);
-
-	//	
-	//	const size_t v_dir_segments = size_t(U_STEPS + 1) * size_t(V_STEPS);
-	//	const size_t u_dir_segments = size_t(V_STEPS + 1) * size_t(U_STEPS);
-	//	const size_t total_vertices = 2 * (v_dir_segments + u_dir_segments);
-	//	lines_vertices.reserve(total_vertices);
-
-	//	//smooth fade
-	//	auto smoothstep = [](float e0, float e1, float x) {
-	//		x = (x - e0) / (e1 - e0);
-	//		if (x < 0.0f) x = 0.0f;
-	//		if (x > 1.0f) x = 1.0f;
-	//		return x * x * (3.0f - 2.0f * x);
-	//		};
-
-	//	auto shade_to_black_floor = [](uint8_t c, float k, float floor_k) -> uint8_t {
-	//		float kk = floor_k + (1.0f - floor_k) * k;
-	//		float cf = float(c) * kk;
-	//		if (cf < 0.0f) cf = 0.0f;
-	//		if (cf > 255.0f) cf = 255.0f;
-	//		return uint8_t(cf);
-	//		};
-
-
-	//	auto push_line = [&](float ax, float ay, float az,
-	//		float bx, float by, float bz,
-	//		uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-
-	//			lines_vertices.emplace_back(PosColVertex{
-	//				.Position{.x = ax, .y = ay, .z = az },
-	//				.Color{.r = r, .g = g, .b = b, .a = a },
-	//				});
-	//			lines_vertices.emplace_back(PosColVertex{
-	//				.Position{.x = bx, .y = by, .z = bz },
-	//				.Color{.r = r, .g = g, .b = b, .a = a },
-	//				});
-	//		};
-
-	//	//v-direction lines 
-	//	for (uint32_t iu = 0; iu <= U_STEPS; ++iu) {
-	//		const float u = (float(iu) / float(U_STEPS)) * U_MAX;
-
-	//		//simple color cue by radius:
-	//		const float u01 = (U_MAX > 0.0f) ? (u / U_MAX) : 0.0f;
-	//		const uint8_t cr = uint8_t(0x40 + (0xBF * (1.0f - u01)));
-	//		const uint8_t cg = 0x80;
-	//		const uint8_t cb = 0xFF;
-
-	//		for (uint32_t iv = 0; iv < V_STEPS; ++iv) {
-	//			const float t0 = float(iv) / float(V_STEPS);
-	//			const float t1 = float(iv + 1) / float(V_STEPS);
-	//			const float v0 = v_min + (v_max - v_min) * t0;
-	//			const float v1 = v_min + (v_max - v_min) * t1;
-
-	//			//p0:
-	//			const float x0 = 1.0f * u * std::cos(v0);
-	//			const float y0 = 1.0f * u * std::sin(v0);
-	//			const float z0 = (c * v0 - z_min) * inv_z_range; 
-
-	//			//p1:
-	//			const float x1 = 1.0f * u * std::cos(v1);
-	//			const float y1 = 1.0f * u * std::sin(v1);
-	//			const float z1 = (c * v1 - z_min) * inv_z_range; 
-
-	//			float v_mid = 0.5f * (v0 + v1);
-	//			float z_mid01 = (c * v_mid - z_min) * inv_z_range; 
-
-	//	
-	//			float t2 = z_mid01;
-	//			const float edge = 0.25f;
-	//			float fade_in = smoothstep(0.0f, edge, t2);
-	//			float fade_out = 1.0f - smoothstep(1.0f - edge, 1.0f, t2);
-	//			float fade = fade_in * fade_out; // 0..1
-
-
-	//			const float floor_k = 0.10f; 
-	//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
-	//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
-	//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
-
-	//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
-
-	//		}
-	//	}
-
-	//	
-	//	for (uint32_t iv = 0; iv <= V_STEPS; ++iv) {
-	//		const float t = float(iv) / float(V_STEPS);
-	//		const float v = v_min + (v_max - v_min) * t;
-
-	//		const float wave_speed = 2.0f; // how fast 
-	//		const float wave_freq = 3.0f;   // number of ripples 
-	//		const float wave_amp = 0.20f;  // radial modulation strength
-
-	//		const float wave = 1.0f + wave_amp * std::sin(wave_freq * v - wave_speed * time);
-
-	//		const uint8_t cr = 0xFF;
-	//		const uint8_t cg = uint8_t(0x60 + 0x80 * std::sin(v));
-	//		const uint8_t cb = 0x20;
-
-	//		for (uint32_t iu = 0; iu < U_STEPS; ++iu) {
-	//			const float u0 = (float(iu) / float(U_STEPS)) * U_MAX;
-	//			const float u1 = (float(iu + 1) / float(U_STEPS)) * U_MAX;
-
-	//			//p0: red-yelo lines coming out of the cone 
-
-	//			const float r0 = 1.4f * u0 * wave;
-	//			const float x0 = r0 * std::cos(v);
-	//			const float y0 = r0 * std::sin(v);
-
-
-	//			const float z0 = (c * v - z_min) * inv_z_range;
-
-	//			//p1:
-	//			const float x1 = r0 * u1 * std::cos(v);
-	//			const float y1 = r0 * u1 * std::sin(v);
-	//			const float z1 = (c * v - z_min) * inv_z_range;
-
-	//			float t_fade = z0;
-	//			const float edge1 = 0.15f;
-	//			float fade_in = smoothstep(0.0f, edge1, t_fade);
-	//			float fade_out = 1.0f - smoothstep(1.0f - edge1, 1.0f, t_fade);
-	//			float fade = fade_in * fade_out;
-
-	//			const float floor_k = 0.25f;
-	//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
-	//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
-	//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
-
-	//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
-	//		}
-	//	}
-
-	//	assert(lines_vertices.size() == total_vertices);
-	//}
-
 	{//make some crossing lines at differnt depths:
-		//lines_vertices.clear();
-		//constexpr size_t count = 2 * 30 + 2 * 30;
-		//lines_vertices.reserve(count);
+		lines_vertices.clear();
+		constexpr size_t count = 2 * 30 + 2 * 30;
+		lines_vertices.reserve(count);
 
-		////hoirizontal lines at z = 0.5 :
-		//for (uint32_t i = 0; i < 30;++i) {
-		//	float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{ .x = -1.0f, .y = y, .z = 0.5f},
-		//		.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
-		//		});
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = 1.0f, .y = y, .z = 0.5f},
-		//		.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
-		//		});
+		//hoirizontal lines at z = 0.5 :
+		for (uint32_t i = 0; i < 30;++i) {
+			float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{ .x = -1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = 1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
+				});
 
-		//}
+		}
 
-		////vetical lines at z = 0.0 (near) through 1.0 far:
-		//for (uint32_t i = 0; i < 30;++i) {
-		//	float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
-		//	float z = (i + 0.5f) / 30.0f;
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = x, .y = -1.0f, .z = z},
-		//		.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
-		//		});
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = x, .y = 1.0f, .z = z},
-		//		.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
-		//		});
+		//vetical lines at z = 0.0 (near) through 1.0 far:
+		for (uint32_t i = 0; i < 30;++i) {
+			float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
+			float z = (i + 0.5f) / 30.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = -1.0f, .z = z},
+				.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = 1.0f, .z = z},
+				.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
+				});
 
-		//}
-		//assert(lines_vertices.size() == count);
+		}
+		assert(lines_vertices.size() == count);
 
 	}
 	
