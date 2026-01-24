@@ -140,9 +140,9 @@ Helpers::~Helpers() {
 
 void Helpers::create() {
 	VkCommandPoolCreateInfo create_info{
-		.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-		.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-		.queueFamilyIndex = rtg.graphics_queue_family.value(),
+	.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+	.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+	.queueFamilyIndex = rtg.graphics_queue_family.value(),
 	};
 	VK(vkCreateCommandPool(rtg.device, &create_info, nullptr, &transfer_command_pool));
 
@@ -152,12 +152,10 @@ void Helpers::create() {
 		.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 		.commandBufferCount = 1,
 	};
-
 	VK(vkAllocateCommandBuffers(rtg.device, &alloc_info, &transfer_command_buffer));
 }
 
 void Helpers::destroy() {
-	//technally no need since freeing the pool will free all the contined buffers
 	if (transfer_command_buffer != VK_NULL_HANDLE) {
 		vkFreeCommandBuffers(rtg.device, transfer_command_pool, 1, &transfer_command_buffer);
 		transfer_command_buffer = VK_NULL_HANDLE;

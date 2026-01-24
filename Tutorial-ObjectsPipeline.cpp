@@ -81,7 +81,7 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 			.pDynamicStates = dynamic_states.data(),
 		};
 
-		// this pipeline will draw triangles 
+		// this pipeline will draw traingels
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 				.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,

@@ -64,16 +64,14 @@ struct Tutorial : RTG::Application {
 		void destroy(RTG&);
 	} lines_pipeline;
 
-
 	struct ObjectsPipeline {
-
-		// descriptor set layout 
+		//descriptor set layouts:
 		VkDescriptorSetLayout set0_Camera = VK_NULL_HANDLE;
 
-		// types fro descriptors:
+		//types for descriptors:
 		using Camera = LinesPipeline::Camera;
 
-		// no push constnat s
+		//no push constants
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
@@ -83,9 +81,7 @@ struct Tutorial : RTG::Application {
 
 		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
 		void destroy(RTG&);
-
-
-	}objects_pipeline;
+	} objects_pipeline;
 
 	//pools from which per-workspace things are allocated:
 	VkCommandPool command_pool = VK_NULL_HANDLE;
