@@ -101,6 +101,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 	{//create object vertices 
 		std::vector < PosNorTexVertex > vertices;
 
+		
 		{ // A [-1,1] x [-1, 1 x {0} quadrilater:
 			plane_vertices.first = uint32_t(vertices.size());
 			vertices.emplace_back(PosNorTexVertex{
@@ -116,7 +117,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 				});
 
 			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = -11.0f, .y = 1.0f, .z = 0.0f},
+				.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f},
 				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
 				.TexCoord{.s = 0.0f, .t = 1.0f },
 				});
@@ -126,7 +127,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 				.TexCoord{.s = 1.0f, .t = 1.0f },
 				});
 			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f},
+				.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f},
 				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
 				.TexCoord{.s = 0.0f, .t = 1.0f },
 				});
@@ -139,7 +140,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 			plane_vertices.count = uint32_t(vertices.size()) - plane_vertices.first;
 		}
 
-		{//a torus 
+		 {//a torus 
 			torus_vertices.first = uint32_t(vertices.size());
 
 			// will parmeteriz with (u,v ) where;
@@ -197,26 +198,29 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 
 		}
 		
-		//A single traingle:
 
+	
+		 {//A single traingle:
+			 /*
 		vertices.emplace_back(PosNorTexVertex{
 			.Position{.x = 0.0f, .y = 0.0f, .z = 0.0f},
-			.Normal{ .x = 0.0f, .y = 0.0f, .z = 1.0f},
-			.TexCoord{.s = 0.0f, .t = 0.0f},
+			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+			.TexCoord{.s = 0.0f, .t = 0.0f },
 			});
 
 		vertices.emplace_back(PosNorTexVertex{
 			.Position{.x = 1.0f, .y = 0.0f, .z = 0.0f},
-			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f},
-			.TexCoord{.s = 1.0f, .t = 0.0f},
+			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+			.TexCoord{.s = 1.0f, .t = 0.0f },
 			});
 
 		vertices.emplace_back(PosNorTexVertex{
 			.Position{.x = 0.0f, .y = 1.0f, .z = 0.0f},
-			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f},
-			.TexCoord{.s = 0.0f, .t = 1.0f},
+			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+			  .TexCoord{.s = 0.0f, .t = 1.0f },
 		});
-
+		*/
+		 }
 		size_t bytes = vertices.size() * sizeof(vertices[0]);
 
 		object_vertices = rtg.helpers.create_buffer(
@@ -688,39 +692,38 @@ void Tutorial::update(float dt) {
 	//}
 
 	{//make some crossing lines at differnt depths:
-		//lines_vertices.clear();
-		//constexpr size_t count = 2 * 30 + 2 * 30;
-		//lines_vertices.reserve(count);
+		lines_vertices.clear();
+		constexpr size_t count = 2 * 30 + 2 * 30;
+		lines_vertices.reserve(count);
 
-		////hoirizontal lines at z = 0.5 :
-		//for (uint32_t i = 0; i < 30;++i) {
-		//	float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{ .x = -1.0f, .y = y, .z = 0.5f},
-		//		.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
-		//		});
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = 1.0f, .y = y, .z = 0.5f},
-		//		.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
-		//		});
+		//hoirizontal lines at z = 0.5 :
+		for (uint32_t i = 0; i < 30;++i) {
+			float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{ .x = -1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
+				});
+		lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = 1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
+				});
 
-		//}
+		}
 
-		////vetical lines at z = 0.0 (near) through 1.0 far:
-		//for (uint32_t i = 0; i < 30;++i) {
-		//	float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
-		//	float z = (i + 0.5f) / 30.0f;
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = x, .y = -1.0f, .z = z},
-		//		.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
-		//		});
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = x, .y = 1.0f, .z = z},
-		//		.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
-		//		});
-
-		//}
-		//assert(lines_vertices.size() == count);
+		//vetical lines at z = 0.0 (near) through 1.0 far:
+		for (uint32_t i = 0; i < 30;++i) {
+			float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
+			float z = (i + 0.5f) / 30.0f;
+		lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = -1.0f, .z = z},
+				.Color {.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = 1.0f, .z = z},
+				.Color {.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff},
+				});
+		}
+		assert(lines_vertices.size() == count);
 
 	}
 	

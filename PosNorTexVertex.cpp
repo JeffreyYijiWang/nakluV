@@ -26,7 +26,7 @@ static std::array< VkVertexInputAttributeDescription, 3 > attributes{
 	VkVertexInputAttributeDescription{
 		.location = 2,
 		.binding = 0,
-		.format = VK_FORMAT_R32G32B32_SFLOAT,
+		.format = VK_FORMAT_R32G32_SFLOAT,
 		.offset = offsetof(PosNorTexVertex, TexCoord),
 	},
 };

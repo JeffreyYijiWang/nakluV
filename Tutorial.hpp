@@ -83,8 +83,6 @@ struct Tutorial : RTG::Application {
 
 		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
 		void destroy(RTG&);
-
-
 	}objects_pipeline;
 
 	//pools from which per-workspace things are allocated:
