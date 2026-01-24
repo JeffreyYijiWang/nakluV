@@ -15,6 +15,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 
 	background_pipeline.create(rtg, render_pass, 0);
 	lines_pipeline.create(rtg, render_pass, 0);
+	objects_pipeline.create(rtg, render_pass, 0);
 
 	{//create descriptor pool:
 		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); //for easier to read counting
@@ -97,7 +98,39 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 		}
 	}
 
+	{ //create object vertices
+		std::vector< PosNorTexVertex > vertices;
 
+		//TODO: replace with more interesting geometry
+		//A single triangle:
+		vertices.emplace_back(PosNorTexVertex{
+			.Position{.x = 0.0f, .y = 0.0f, .z = 0.0f },
+			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+		.TexCoord{.s = 0.0f, .t = 0.0f },
+			});
+		vertices.emplace_back(PosNorTexVertex{
+			.Position{.x = 1.0f, .y = 0.0f, .z = 0.0f },
+				.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+		.TexCoord{.s = 1.0f, .t = 0.0f },
+			});
+		vertices.emplace_back(PosNorTexVertex{
+			.Position{.x = 0.0f, .y = 1.0f, .z = 0.0f },
+					.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+		.TexCoord{.s = 0.0f, .t = 1.0f },
+			});
+
+		size_t bytes = vertices.size() * sizeof(vertices[0]);
+
+		object_vertices = rtg.helpers.create_buffer(
+			bytes,
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			Helpers::Unmapped
+		);
+
+		//copy data to buffer:
+		rtg.helpers.transfer_to_buffer(vertices.data(), bytes, object_vertices);
+	}
 }
 
 Tutorial::~Tutorial() {
@@ -106,6 +139,8 @@ Tutorial::~Tutorial() {
 	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS) {
 		std::cerr << "Failed to vkDeviceWaitIdle in Tutorial::~Tutorial [" << string_VkResult(result) << "]; continuing anyway." << std::endl;
 	}
+
+	rtg.helpers.destroy_buffer(std::move(object_vertices));
 
 	if (swapchain_depth_image.handle != VK_NULL_HANDLE) {
 		destroy_framebuffers();
@@ -136,7 +171,7 @@ Tutorial::~Tutorial() {
 	}
 	background_pipeline.destroy(rtg);
 	lines_pipeline.destroy(rtg);
-
+	objects_pipeline.destroy(rtg);
 	refsol::Tutorial_destructor(rtg, &render_pass, &command_pool);
 }
 
@@ -346,6 +381,20 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		}
 
 
+		{ //draw with the objects pipeline:
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
+
+			{ //use object_vertices (offset 0) as vertex buffer binding 0:
+				std::array< VkBuffer, 1 > vertex_buffers{ object_vertices.handle };
+				std::array< VkDeviceSize, 1 > offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
+
+			//Camera descriptor set is still bound(!)
+
+			//draw all vertices:
+			vkCmdDraw(workspace.command_buffer, uint32_t(object_vertices.size / sizeof(ObjectsPipeline::Vertex)), 1, 0, 0);
+		}
 		
 		vkCmdEndRenderPass(workspace.command_buffer);
 	
@@ -378,7 +427,7 @@ void Tutorial::update(float dt) {
 	}
 
 	//https://mathworld.wolfram.com/Helicoid.html
-	{
+	{/*
 		lines_vertices.clear();
 
 		//tessellation:
@@ -530,42 +579,43 @@ void Tutorial::update(float dt) {
 		}
 
 		assert(lines_vertices.size() == total_vertices);
+		*/
 	}
 
 	{//make some crossing lines at differnt depths:
-		//lines_vertices.clear();
-		//constexpr size_t count = 2 * 30 + 2 * 30;
-		//lines_vertices.reserve(count);
+		lines_vertices.clear();
+		constexpr size_t count = 2 * 30 + 2 * 30;
+		lines_vertices.reserve(count);
 
-		////hoirizontal lines at z = 0.5 :
-		//for (uint32_t i = 0; i < 30;++i) {
-		//	float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{ .x = -1.0f, .y = y, .z = 0.5f},
-		//		.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
-		//		});
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = 1.0f, .y = y, .z = 0.5f},
-		//		.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
-		//		});
+		//hoirizontal lines at z = 0.5 :
+		for (uint32_t i = 0; i < 30;++i) {
+			float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{ .x = -1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = 1.0f, .y = y, .z = 0.5f},
+				.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
+				});
 
-		//}
+		}
 
-		////vetical lines at z = 0.0 (near) through 1.0 far:
-		//for (uint32_t i = 0; i < 30;++i) {
-		//	float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
-		//	float z = (i + 0.5f) / 30.0f;
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = x, .y = -1.0f, .z = z},
-		//		.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
-		//		});
-		//	lines_vertices.emplace_back(PosColVertex{
-		//		.Position{.x = x, .y = 1.0f, .z = z},
-		//		.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
-		//		});
+	///vetical lines at z = 0.0 (near) through 1.0 far:
+		for (uint32_t i = 0; i < 30;++i) {
+			float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
+			float z = (i + 0.5f) / 30.0f;
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = -1.0f, .z = z},
+				.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = x, .y = 1.0f, .z = z},
+				.Color {.r = 0x44, .g = 0x00, .b = 0x00, .a = 0xff},
+				});
 
-		//}
-		//assert(lines_vertices.size() == count);
+		}
+		assert(lines_vertices.size() == count);
 
 	}
 	
