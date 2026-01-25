@@ -154,10 +154,10 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 				.TexCoord{.s = 1.0f, .t = 0.0f },
 				});
 
-			plane_vertices.count = uint32_t(vertices.size()) - plane_vertices.first;
+				plane_vertices.count = uint32_t(vertices.size()) - plane_vertices.first;
 		}
 
-		 {//a torus 
+		{//a torus 
 			torus_vertices.first = uint32_t(vertices.size());
 
 			// will parmeteriz with (u,v ) where;
@@ -168,7 +168,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 			constexpr float R2 = 0.15f; // tube raidu
 
 			constexpr uint32_t U_STEPS = 20;
-			constexpr uint32_t V_STEPS = 16; 
+			constexpr uint32_t V_STEPS = 16;
 
 			//texture repreats aroudn the torus:
 			constexpr float V_REPEATS = 2.0f;
@@ -197,47 +197,47 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 						.s = ui / float(U_STEPS) * U_REPEATS,
 						.t = vi / float(V_STEPS) * V_REPEATS,
 					},
-				});
-			};
+					});
+				};
 
 			for (uint32_t ui = 0; ui < U_STEPS; ++ui) {
 				for (uint32_t vi = 0; vi < V_STEPS; ++vi) {
 					emplace_vertex(ui, vi);
-					emplace_vertex(ui+1, vi);
-					emplace_vertex(ui, vi+1);
+					emplace_vertex(ui + 1, vi);
+					emplace_vertex(ui, vi + 1);
 
-					emplace_vertex(ui, vi+1);
-					emplace_vertex(ui+1, vi);
-					emplace_vertex(ui+1, vi+1);
+					emplace_vertex(ui, vi + 1);
+					emplace_vertex(ui + 1, vi);
+					emplace_vertex(ui + 1, vi + 1);
 				}
 			}
 			torus_vertices.count = uint32_t(vertices.size()) - torus_vertices.first;
 
 		}
-		
 
-	
-		 {//A single traingle:
-			 /*
-		vertices.emplace_back(PosNorTexVertex{
-			.Position{.x = 0.0f, .y = 0.0f, .z = 0.0f},
-			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
-			.TexCoord{.s = 0.0f, .t = 0.0f },
-			});
 
-		vertices.emplace_back(PosNorTexVertex{
-			.Position{.x = 1.0f, .y = 0.0f, .z = 0.0f},
-			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
-			.TexCoord{.s = 1.0f, .t = 0.0f },
-			});
 
-		vertices.emplace_back(PosNorTexVertex{
-			.Position{.x = 0.0f, .y = 1.0f, .z = 0.0f},
-			.Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
-			  .TexCoord{.s = 0.0f, .t = 1.0f },
-		});
-		*/
-		 }
+		{//A single traingle:
+			/*
+	   vertices.emplace_back(PosNorTexVertex{
+		   .Position{.x = 0.0f, .y = 0.0f, .z = 0.0f},
+		   .Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+		   .TexCoord{.s = 0.0f, .t = 0.0f },
+		   });
+
+	   vertices.emplace_back(PosNorTexVertex{
+		   .Position{.x = 1.0f, .y = 0.0f, .z = 0.0f},
+		   .Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+		   .TexCoord{.s = 1.0f, .t = 0.0f },
+		   });
+
+	   vertices.emplace_back(PosNorTexVertex{
+		   .Position{.x = 0.0f, .y = 1.0f, .z = 0.0f},
+		   .Normal{.x = 0.0f, .y = 0.0f, .z = 1.0f },
+			 .TexCoord{.s = 0.0f, .t = 1.0f },
+	   });
+	   */
+		}
 		size_t bytes = vertices.size() * sizeof(vertices[0]);
 
 		object_vertices = rtg.helpers.create_buffer(
@@ -252,6 +252,160 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 		rtg.helpers.transfer_to_buffer(vertices.data(), bytes, object_vertices);
 	}
 
+	{/// make some texture
+		textures.reserve(2);
+
+		{//textre 0 will be dark grey / light greak check baor with ared square at the origin.
+			//actual make the texture: 
+			uint32_t size = 128;
+			std::vector < uint32_t> data;
+			data.reserve(size* size);
+			for (uint32_t y = 0; y < size; ++y) {
+				float fy = (y + 0.5f) / float(size);
+				for (uint32_t x = 0; x < size; ++x) {
+					float fx = (x + 0.5f) / float(size);
+
+					//highlight the orgin: 
+					if (fx < 0.05f && fy < 0.05f) data.emplace_back(0xff0000ff); //red
+					else if ((fx < 0.5f) == (fy < 0.5f)) data.emplace_back(0xff444444); // dark grey
+					else  data.emplace_back(0xffbbbbbb); //light grey
+				}
+			}
+
+			//make palce for textur eto live on the GPU
+			textures.emplace_back(rtg.helpers.create_image(
+				VkExtent2D{ .width = size, .height = size }, //siz eof image
+				VK_FORMAT_R8G8B8A8_UNORM, //HOW TO INTERPRET IMAGE DATA(in this case, linearly -encode * -bit RGBA
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sapmle and uplaod
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,	//should be device local
+				Helpers::Unmapped
+			));
+
+			//transfer data
+			rtg.helpers.transfer_to_image(data.data(), sizeof(data[0])* data.size(), textures.back());
+		}
+
+		{
+			//texture 1 will be the 'xor' texture
+		}
+	}
+
+	{ //make image views for the texture
+		texture_views.reserve(texture.size());
+		for (Helpers::AllocatedImage const& image : textures) {
+			VkImageViewCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.flag = 0,
+				.image = image.handle,
+				.viewType = VK_IMAGE_VIEW_TYPE_2D,
+				.format = image.format,
+				// .componet set swizling and is fine when zero-initialied 
+				.subresorceRange{
+					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					.baseMipLevel = 0,
+					.levelCount = 1,
+					.baseArrayLayer = 0,
+					.layerCount = 1,
+				}
+			};
+
+			VkImageView image_view = VK_NULL_HANDLE;
+			VK(vkCreateimageView(rtg.device, &create_info, nullptr, &image_view));
+
+			texture_views.emplace_back(image_view);
+		}
+		assert(texture_views.size() == textures.size());
+	}
+
+	{//make sampler for the textures
+		VkSamplerCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.flages = 0,
+			.magFilter = VK_FILTER_NEAREST,
+			.minFilter = VK_FILTER_NEAREST,
+			.mimapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.mipLodBias = 0.0f,
+			.anisotropyEnable = VK_FALSE,
+			.maxAnisotropy = 0.0f, //doesn't matter if anisotropy ins't enabled
+			.compareOp = VK_COMPARE_OP_ALWAYS, //doesn't matter if anisotropy isn't enabled 
+			.compareEnable = VK_FALSE,
+			.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled 
+			.minLod = 0.0f,
+			.maxLod = 0.0f ,
+			.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+			.unnormalizedCoordinates = VK_FALSE,
+		};
+
+		VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
+	}
+
+	{//create the texture descirptor pool
+		
+			uint32_t per_texture = uint32_t(textures.size()); //for easier to read counting
+
+			std::array < VkDescriptorPoolSize, 1> pool_sizes{
+
+				VkDescriptorPoolSize{ //union buffer descirpts
+					.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.descriptorCount = 1 * 1 * per_texture, //one descriptor per set, one set per trexure
+				},
+			};
+
+			VkDescriptorPoolCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+				.flags = 0, // because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
+				.maxSets = 1 * per_texture, //two set per texsture
+				.poolSizeCount = uint32_t(pool_sizes.size()),
+				.pPoolSizes = pool_sizes.data(),
+			};
+
+			VK(vkCreateDescriptorPool(rtg.device, &create_info, nullptr, &texture_descriptor_pool));
+	}
+
+	{//allocate and write the texture descriptor sets
+		//Allocate and write the texture descriptor sets
+		VkDescriptorSetAllocateInfo alloc_info{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = texture_descriptor_pool;
+		.descriptorSetCount = 1,
+			.pSetLayout = &objects_pipeline.set_TEXTURE,
+		};
+		texture_descriptors.assign(textures.size(), VK_NULL_HANDLE);
+
+		for (VkDescriptorset& descriptor_set : texture_descriptors) {
+			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &descriptor_set));
+		}
+
+		//write descptor for textures 
+		std::vector < VkDescriptorImageInfo > infos(textures.size());
+		std::vector < VkWriteDescriptorSet > writes(textures.size());
+
+		for (Helpers::AllocatedImage const& image : textures) {
+			size_t i = &image - &textures[0];
+
+			infos[i] = VkDescriptorImageInfo{
+				.sampler = texture_sampler,
+				.imageView = texture_view[i],
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			};
+
+			writes[i] = VkWritesDescriptorSet{
+				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+				.dstSet = texture_descriptors[i],
+				.dstBinding = 0,
+				.dstArrayElement = 0,
+				.descriptorCount = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.pImageInfo = &info[i],
+			};
+		}
+
+		vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
+	}
 }
 
 Tutorial::~Tutorial() {
@@ -260,6 +414,32 @@ Tutorial::~Tutorial() {
 	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS) {
 		std::cerr << "Failed to vkDeviceWaitIdle in Tutorial::~Tutorial [" << string_VkResult(result) << "]; continuing anyway." << std::endl;
 	}
+
+	if (texture_descriptor_pool) {
+		vkDestroyDescriptorPool(rtg.device, texture_descriptor_pool, nullptr);
+		texture_descriptor_pool = null;
+
+		//this also frees the descriptor sets allocated form the pool: 
+		texture_descriptors.clear();
+	}
+
+	if (texture_sampler) {
+		vkDestroySampler(rtg.device, texture_sampler, nullptr);
+		texture_sampler = VK_NULL_HANDLE;
+	}
+
+	for (VkImageView& view : texture_views) {
+		vkDestoryImageView(rtg.device, view, nullptr);
+		view = VK_NULL_HANDLE;
+	}
+
+	texture_views.clear();
+
+	for (auto& texture : texture) {
+		rtg.helpers.destroy_image(std::move(texture));
+	}
+
+	textures.clear();
 
 	rtg.helpers.destroy_buffer(std::move(object_vertices));
 
@@ -620,6 +800,18 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			//draw all instaces 
 			for (ObjectInstance const& inst : object_instances) {
 				uint32_t index = uint32_t(&inst - &object_instances[0]);
+
+				//bind texture descriptor set:
+
+				vkCmdBindDescriptorsets(
+					workspace.command_buffer, //command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+					objects_pipeline.layout, //pipeline layout 
+					2, //second set 
+					1, &texture_descriptors[inst.texture] //descriptor sets count, ptr
+					0, nullptr // dynamic offsets count, ptr
+				);
+
 				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
 			}
 		}
@@ -888,50 +1080,6 @@ void Tutorial::update(float dt) {
 				});
 		}
 	}
-	//{// make some objects:
-	//	object_instances.clear();
-
-	//	{//plane translate +x by one unit:
-	//		mat4 WORLD_FROM_LOCAL{
-	//			1.0f, 0.0f, 0.0f, 0.0f,
-	//			0.0f, 1.0f, 0.0f, 0.0f,
-	//			0.0f, 0.0f, 1.0f, 0.0f,
-	//			1.0f, 0.0f, 0.0f, 1.0f,
-	//		};
-
-	//		object_instances.emplace_back(ObjectInstance{
-	//			.vertices = plane_vertices,
-	//			.transform{
-	//				.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
-	//				.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
-	//				.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
-	//			},	
-	//		});
-	//	}
-	//	{ // TORUS TRANSLATED -X BY ONE UNIT AND ROTATED CCW AROUND +Y 
-	//		float ang = time / 60.0f * 2.0f * float(M_PI) * 10.0f;
-	//		float ca = std::cos(ang);
-	//		float sa = std::sin(ang);
-
-	//		mat4 WORLD_FROM_LOCAL{
-	//			ca, 0.0f, -sa, 0.0f,
-	//			0.0f, 1.0f, 0.0f, 0.0f,
-	//			sa, 0.0f, ca, 0.0f,
-	//			-1.0f, 0.0f, 0.0f, 1.0f,
-	//		};
-
-	//		object_instances.emplace_back(ObjectInstance{
-	//			.vertices = torus_vertices,
-	//			.transform{
-	//				.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
-	//				.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
-	//				.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
-	//			},
-	//		});
-	//	}
-
-	//}
-	
 
 }
 

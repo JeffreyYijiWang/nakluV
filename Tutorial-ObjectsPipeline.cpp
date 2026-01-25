@@ -52,6 +52,44 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
 	}
 
+	{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
+		std::array< VkDescriptorSetLayoutBinding, 1> bindings{
+			VkDescriptorSetLayoutBinding{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+		};
+
+		VkDescriptorSetLayoutCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = uint32_t(bindings.size()),
+			.pBindings = bindings.data(),
+		};
+
+		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set2_TEXTURE));
+	}
+
+
+	{ //create pipline layout
+		std::array < VkDescriptorSetLayout, 3> layouts{
+			set1_Transforms, //we'd like to say VK_NULLHJANDLE her but that no invoad without an extnetion
+			set1_Transforms,
+			set2_TEXTURE,
+		};
+
+		VkPipelineLayoutCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = uint32_t(layouts.size()),
+			.pSetLayouts = layouts.data(),
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr,
+		};
+
+		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
+	}
+
 	{ //create pipeline:
 
 	  //shader code for vertex and fragment pipleine states:
@@ -170,6 +208,11 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 }
 
 void Tutorial::ObjectsPipeline::destroy(RTG& rtg) {
+
+	if (set2_TEXTURE != VK_NULL_HANDLE) {
+		vkDestroyDescriptorSetLayout(rtg.device, set2_TEXTURE, nullptr);
+		set2_TEXTURE = VK_NULL_HANDLE;
+	}
 	if (set1_Transforms != VK_NULL_HANDLE) {
 		vkDestroyDescriptorSetLayout(rtg.device, set1_Transforms, nullptr);
 		set1_Transforms = VK_NULL_HANDLE;
