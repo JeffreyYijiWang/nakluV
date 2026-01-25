@@ -8,5 +8,11 @@ layout(location = 2) in vec2 texCoord;
 layout(location = 0) out vec4 outColor;
 
 void main() {
-	outColor = vec4(fract(texCoord), 0.0, 1.0);
+	vec3 n = normalize(normal);
+	vec3 l = vec3(0.0, 0.0, 1.0);
+	vec3 albedo = vec3(fract(texCoord), 0.0);
+
+	//hemisphere lighting from direction l:
+	vec3 e = vec3(0.5 * dot(n,l) + 0.5);
+	outColor = vec4(e * albedo, 1.0);
 }

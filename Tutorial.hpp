@@ -68,11 +68,16 @@ struct Tutorial : RTG::Application {
 	struct ObjectsPipeline {
 
 		// descriptor set layout 
-		VkDescriptorSetLayout set0_Camera = VK_NULL_HANDLE;
-
-		// types fro descriptors:
-		using Camera = LinesPipeline::Camera;
-
+		/*VkDescriptorSetLayout set0_Camera = VK_NULL_HANDLE;*/
+		VkDescriptorSetLayout set1_Transforms = VK_NULL_HANDLE;
+		
+		// types for descriptors:
+		struct Transform {
+			mat4 CLIP_FROM_LOCAL;
+			mat4 WORLD_FROM_LOCAL;
+			mat4 WORLD_FROM_LOCAL_NORMAL;
+		};
+		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
 		// no push constnat s
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -102,6 +107,11 @@ struct Tutorial : RTG::Application {
 		Helpers::AllocatedBuffer Camera_src; // host coherent; mapped
 		Helpers::AllocatedBuffer Camera; //device local
 		VkDescriptorSet Camera_descriptors; //references Camera
+
+		//locat for ObjectsPipeline::Transforma data: (stream to GPU per frame).
+		Helpers::AllocatedBuffer Transforms_src; // host coherent ; mapped
+		Helpers::AllocatedBuffer Transforms; //decice local
+		VkDescriptorSet Transforms_descriptors; // references Transforms
 
 	};
 	std::vector< Workspace > workspaces;
@@ -137,6 +147,13 @@ struct Tutorial : RTG::Application {
 	mat4 CLIP_FROM_WORLD;
 
 	std::vector < LinesPipeline::Vertex > lines_vertices;
+
+	struct ObjectInstance {
+		ObjectVertices vertices;
+		ObjectsPipeline::Transform transform;
+	};
+
+	std::vector < ObjectInstance > object_instances;
 	//--------------------------------------------------------------------
 	//Rendering function, uses all the resources above to queue work to draw a frame:
 

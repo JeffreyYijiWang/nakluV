@@ -20,18 +20,22 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 	{//create descriptor pool:
 		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); //for easier to read counting
 
-		std::array < VkDescriptorPoolSize, 1> pool_sizes{
-			//we only need uniform buffer descriptor for the momenbt:
-			VkDescriptorPoolSize{
+		std::array < VkDescriptorPoolSize, 2> pool_sizes{
+
+			VkDescriptorPoolSize{ //union buffer descirpts
 				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				.descriptorCount = 1 * per_workspace, //one descriptor per set, one set per workspace
+			},
+			VkDescriptorPoolSize{
+				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+				.descriptorCount = 1 * per_workspace, //one descriptoper set, one set per workspace
 			},
 		};
 		
 		VkDescriptorPoolCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 			.flags = 0, // because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
-			.maxSets = 1 * per_workspace, //one set per workspace
+			.maxSets = 2 * per_workspace, //two set per workspace
 			.poolSizeCount = uint32_t(pool_sizes.size()),
 			.pPoolSizes = pool_sizes.data(),
 		};
@@ -66,6 +70,19 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 			};
 
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.Camera_descriptors));
+		}
+
+		{// allocate descriptor 
+			VkDescriptorSetAllocateInfo alloc_info{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = descriptor_pool,
+				.descriptorSetCount = 1,
+				.pSetLayouts = &objects_pipeline.set1_Transforms,
+			};
+
+			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.Transforms_descriptors));
+
+			//not we iwll fin this descirpt set in tehredn when buefer or re-allocated;
 		}
 		
 		//todo: descruotir write
@@ -265,6 +282,14 @@ Tutorial::~Tutorial() {
 		if (workspace.Camera.handle != VK_NULL_HANDLE) {
 			rtg.helpers.destroy_buffer(std::move(workspace.Camera));
 		}
+
+		if (workspace.Transforms_src.handle != VK_NULL_HANDLE) {
+			rtg.helpers.destroy_buffer(std::move(workspace.Transforms_src));
+		}
+		if (workspace.Transforms.handle != VK_NULL_HANDLE) {
+			rtg.helpers.destroy_buffer(std::move(workspace.Transforms));
+		}
+		//tramsforms_descriptro sfreed when pool is destoryed
 	}
 
 
@@ -385,6 +410,84 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 	}
 
+	if (!object_instances.empty()) { //upload obecjt transforms
+		//[re-]allocate lines buffers is need;
+		size_t needed_bytes = object_instances.size() * sizeof(ObjectsPipeline::Transform);
+		if (workspace.Transforms_src.handle == VK_NULL_HANDLE ||
+			workspace.Transforms_src.size < needed_bytes) {
+			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
+			size_t new_bytes = ((needed_bytes + 4096) / 4096) * 4096;
+			if (workspace.Transforms_src.handle) {
+				rtg.helpers.destroy_buffer(std::move(workspace.Transforms_src));
+			}
+			if (workspace.Transforms.handle) {
+				rtg.helpers.destroy_buffer(std::move(workspace.Transforms));
+			}
+
+			workspace.Transforms_src = rtg.helpers.create_buffer(
+				new_bytes,
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT, //GOING TO HAVE gpu COPY FROM THIS MEMORY
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, //HOST-VISIBLE MORY, COHERENT(NO SPECIAL SYN NEEDED)
+				Helpers::Mapped //get a pointer to the memory
+			);
+
+			workspace.Transforms = rtg.helpers.create_buffer(
+				new_bytes,
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, //going ot use as a vertex buffer , also goin to have GPU into this memory
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //GPU- local memory 
+				Helpers::Unmapped // don;t get a pointer to the memory
+			);
+
+			// update the descriptor set:
+			VkDescriptorBufferInfo Transforms_info{
+				.buffer = workspace.Transforms.handle,
+				.offset = 0,
+				.range = workspace.Transforms.size,
+			};
+
+			std::array < VkWriteDescriptorSet, 1> writes{
+				VkWriteDescriptorSet{
+					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.dstSet = workspace.Transforms_descriptors,
+					.dstBinding = 0,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+					.pBufferInfo = &Transforms_info,
+				},
+			};
+
+			vkUpdateDescriptorSets(
+				rtg.device,
+				uint32_t(writes.size()), writes.data(), //descriptors count, dat
+				0, nullptr //descripto copies count , data
+			);
+
+			std::cout << "Re-allocationed objhects buffers to " << new_bytes << " bytes." << std::endl;
+		}
+		assert(workspace.Transforms_src.size == workspace.Transforms.size);
+		assert(workspace.Transforms_src.size >= needed_bytes);
+
+		{
+			//copy transform into Transforms_src
+			assert(workspace.Transforms_src.allocation.mapped);
+			ObjectsPipeline::Transform* out = reinterpret_cast<ObjectsPipeline::Transform * > (workspace.Transforms_src.allocation.data());
+			//strict aliasing violation, but it doesn't matter
+			for (ObjectInstance const& inst : object_instances) {
+				*out = inst.transform; 
+				++out;
+			}
+		}
+
+		//decice -size copy form lines)_vertical _src -> lines_vertices 
+		VkBufferCopy copy_region{
+			.srcOffset = 0,
+			.dstOffset = 0,
+			.size = needed_bytes,
+		};
+		vkCmdCopyBuffer(workspace.command_buffer, workspace.Transforms_src.handle, workspace.Transforms.handle, 1, &copy_region);
+	}
+
 	{//memory barrier to make sure copies complete before rendign happens:
 		VkMemoryBarrier memory_barrier{
 			.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
@@ -487,7 +590,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
 		}
 
-		{//draw with the object pipeline:
+		if(!object_instances.empty()){//draw with the object pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
 			
 			{//use object vertices (offset 0 ) as vertex buffer binging 0:
@@ -497,11 +600,28 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
 
 			}
+			{//bind transforms descript set:
+				std::array< VkDescriptorSet, 1 > descriptor_sets{
+					workspace.Transforms_descriptors, //1: Transforms
+				};
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer,  // command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+					objects_pipeline.layout, //pipline layout
+					1, //first set 
+					uint32_t(descriptor_sets.size()), descriptor_sets.data(), //descriptorr set coutn, ptr
+					0, nullptr// dynamic offset cout, ptr
+				);
+			}
 
 			 //camera descriptor set is stil bounde (!)
 
-			//draw all vertices :
-			vkCmdDraw(workspace.command_buffer, uint32_t(object_vertices.size / sizeof(ObjectsPipeline::Vertex)), 1, 0, 0);
+
+			//draw all instaces 
+			for (ObjectInstance const& inst : object_instances) {
+				uint32_t index = uint32_t(&inst - &object_instances[0]);
+				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+			}
 		}
 
 
@@ -535,161 +655,162 @@ void Tutorial::update(float dt) {
 		);
 
 	}
+	{
+		////https://mathworld.wolfram.com/Helicoid.html
+		//{ //helixoid 
+		//	lines_vertices.clear();
 
-	////https://mathworld.wolfram.com/Helicoid.html
-	//{ //helixoid 
-	//	lines_vertices.clear();
+		//	//tessellation:
+		//	constexpr uint32_t U_STEPS = 70;   //radial samples
+		//	constexpr uint32_t V_STEPS = 80;  //angular samples
+		//	constexpr float U_MAX = 1.0f;
 
-	//	//tessellation:
-	//	constexpr uint32_t U_STEPS = 70;   //radial samples
-	//	constexpr uint32_t V_STEPS = 80;  //angular samples
-	//	constexpr float U_MAX = 1.0f;
+		//	//how many turns:
+		//	constexpr float TURNS = 2.3f;
+		//	const float v_min = 0.0f;
+		//	const float v_max = 2.0f * float(M_PI) * TURNS;
 
-	//	//how many turns:
-	//	constexpr float TURNS = 2.3f;
-	//	const float v_min = 0.0f;
-	//	const float v_max = 2.0f * float(M_PI) * TURNS;
+		//	//pitch control
+		//	constexpr float c = 0.90f;
+		//	const float z_min = c * v_min;
+		//	const float z_max = c * v_max;
+		//	const float inv_z_range = 1.0f / (z_max - z_min);
 
-	//	//pitch control
-	//	constexpr float c = 0.90f;
-	//	const float z_min = c * v_min;
-	//	const float z_max = c * v_max;
-	//	const float inv_z_range = 1.0f / (z_max - z_min);
+		//	
+		//	const size_t v_dir_segments = size_t(U_STEPS + 1) * size_t(V_STEPS);
+		//	const size_t u_dir_segments = size_t(V_STEPS + 1) * size_t(U_STEPS);
+		//	const size_t total_vertices = 2 * (v_dir_segments + u_dir_segments);
+		//	lines_vertices.reserve(total_vertices);
 
-	//	
-	//	const size_t v_dir_segments = size_t(U_STEPS + 1) * size_t(V_STEPS);
-	//	const size_t u_dir_segments = size_t(V_STEPS + 1) * size_t(U_STEPS);
-	//	const size_t total_vertices = 2 * (v_dir_segments + u_dir_segments);
-	//	lines_vertices.reserve(total_vertices);
+		//	//smooth fade
+		//	auto smoothstep = [](float e0, float e1, float x) {
+		//		x = (x - e0) / (e1 - e0);
+		//		if (x < 0.0f) x = 0.0f;
+		//		if (x > 1.0f) x = 1.0f;
+		//		return x * x * (3.0f - 2.0f * x);
+		//		};
 
-	//	//smooth fade
-	//	auto smoothstep = [](float e0, float e1, float x) {
-	//		x = (x - e0) / (e1 - e0);
-	//		if (x < 0.0f) x = 0.0f;
-	//		if (x > 1.0f) x = 1.0f;
-	//		return x * x * (3.0f - 2.0f * x);
-	//		};
-
-	//	auto shade_to_black_floor = [](uint8_t c, float k, float floor_k) -> uint8_t {
-	//		float kk = floor_k + (1.0f - floor_k) * k;
-	//		float cf = float(c) * kk;
-	//		if (cf < 0.0f) cf = 0.0f;
-	//		if (cf > 255.0f) cf = 255.0f;
-	//		return uint8_t(cf);
-	//		};
-
-
-	//	auto push_line = [&](float ax, float ay, float az,
-	//		float bx, float by, float bz,
-	//		uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
-
-	//			lines_vertices.emplace_back(PosColVertex{
-	//				.Position{.x = ax, .y = ay, .z = az },
-	//				.Color{.r = r, .g = g, .b = b, .a = a },
-	//				});
-	//			lines_vertices.emplace_back(PosColVertex{
-	//				.Position{.x = bx, .y = by, .z = bz },
-	//				.Color{.r = r, .g = g, .b = b, .a = a },
-	//				});
-	//		};
-
-	//	//v-direction lines 
-	//	for (uint32_t iu = 0; iu <= U_STEPS; ++iu) {
-	//		const float u = (float(iu) / float(U_STEPS)) * U_MAX;
-
-	//		//simple color cue by radius:
-	//		const float u01 = (U_MAX > 0.0f) ? (u / U_MAX) : 0.0f;
-	//		const uint8_t cr = uint8_t(0x40 + (0xBF * (1.0f - u01)));
-	//		const uint8_t cg = 0x80;
-	//		const uint8_t cb = 0xFF;
-
-	//		for (uint32_t iv = 0; iv < V_STEPS; ++iv) {
-	//			const float t0 = float(iv) / float(V_STEPS);
-	//			const float t1 = float(iv + 1) / float(V_STEPS);
-	//			const float v0 = v_min + (v_max - v_min) * t0;
-	//			const float v1 = v_min + (v_max - v_min) * t1;
-
-	//			//p0:
-	//			const float x0 = 1.0f * u * std::cos(v0);
-	//			const float y0 = 1.0f * u * std::sin(v0);
-	//			const float z0 = (c * v0 - z_min) * inv_z_range; 
-
-	//			//p1:
-	//			const float x1 = 1.0f * u * std::cos(v1);
-	//			const float y1 = 1.0f * u * std::sin(v1);
-	//			const float z1 = (c * v1 - z_min) * inv_z_range; 
-
-	//			float v_mid = 0.5f * (v0 + v1);
-	//			float z_mid01 = (c * v_mid - z_min) * inv_z_range; 
-
-	//	
-	//			float t2 = z_mid01;
-	//			const float edge = 0.25f;
-	//			float fade_in = smoothstep(0.0f, edge, t2);
-	//			float fade_out = 1.0f - smoothstep(1.0f - edge, 1.0f, t2);
-	//			float fade = fade_in * fade_out; // 0..1
+		//	auto shade_to_black_floor = [](uint8_t c, float k, float floor_k) -> uint8_t {
+		//		float kk = floor_k + (1.0f - floor_k) * k;
+		//		float cf = float(c) * kk;
+		//		if (cf < 0.0f) cf = 0.0f;
+		//		if (cf > 255.0f) cf = 255.0f;
+		//		return uint8_t(cf);
+		//		};
 
 
-	//			const float floor_k = 0.10f; 
-	//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
-	//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
-	//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
+		//	auto push_line = [&](float ax, float ay, float az,
+		//		float bx, float by, float bz,
+		//		uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
 
-	//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
+		//			lines_vertices.emplace_back(PosColVertex{
+		//				.Position{.x = ax, .y = ay, .z = az },
+		//				.Color{.r = r, .g = g, .b = b, .a = a },
+		//				});
+		//			lines_vertices.emplace_back(PosColVertex{
+		//				.Position{.x = bx, .y = by, .z = bz },
+		//				.Color{.r = r, .g = g, .b = b, .a = a },
+		//				});
+		//		};
 
-	//		}
-	//	}
+		//	//v-direction lines 
+		//	for (uint32_t iu = 0; iu <= U_STEPS; ++iu) {
+		//		const float u = (float(iu) / float(U_STEPS)) * U_MAX;
 
-	//	
-	//	for (uint32_t iv = 0; iv <= V_STEPS; ++iv) {
-	//		const float t = float(iv) / float(V_STEPS);
-	//		const float v = v_min + (v_max - v_min) * t;
+		//		//simple color cue by radius:
+		//		const float u01 = (U_MAX > 0.0f) ? (u / U_MAX) : 0.0f;
+		//		const uint8_t cr = uint8_t(0x40 + (0xBF * (1.0f - u01)));
+		//		const uint8_t cg = 0x80;
+		//		const uint8_t cb = 0xFF;
 
-	//		const float wave_speed = 2.0f; // how fast 
-	//		const float wave_freq = 3.0f;   // number of ripples 
-	//		const float wave_amp = 0.20f;  // radial modulation strength
+		//		for (uint32_t iv = 0; iv < V_STEPS; ++iv) {
+		//			const float t0 = float(iv) / float(V_STEPS);
+		//			const float t1 = float(iv + 1) / float(V_STEPS);
+		//			const float v0 = v_min + (v_max - v_min) * t0;
+		//			const float v1 = v_min + (v_max - v_min) * t1;
 
-	//		const float wave = 1.0f + wave_amp * std::sin(wave_freq * v - wave_speed * time);
+		//			//p0:
+		//			const float x0 = 1.0f * u * std::cos(v0);
+		//			const float y0 = 1.0f * u * std::sin(v0);
+		//			const float z0 = (c * v0 - z_min) * inv_z_range; 
 
-	//		const uint8_t cr = 0xFF;
-	//		const uint8_t cg = uint8_t(0x60 + 0x80 * std::sin(v));
-	//		const uint8_t cb = 0x20;
+		//			//p1:
+		//			const float x1 = 1.0f * u * std::cos(v1);
+		//			const float y1 = 1.0f * u * std::sin(v1);
+		//			const float z1 = (c * v1 - z_min) * inv_z_range; 
 
-	//		for (uint32_t iu = 0; iu < U_STEPS; ++iu) {
-	//			const float u0 = (float(iu) / float(U_STEPS)) * U_MAX;
-	//			const float u1 = (float(iu + 1) / float(U_STEPS)) * U_MAX;
+		//			float v_mid = 0.5f * (v0 + v1);
+		//			float z_mid01 = (c * v_mid - z_min) * inv_z_range; 
 
-	//			//p0: red-yelo lines coming out of the cone 
+		//	
+		//			float t2 = z_mid01;
+		//			const float edge = 0.25f;
+		//			float fade_in = smoothstep(0.0f, edge, t2);
+		//			float fade_out = 1.0f - smoothstep(1.0f - edge, 1.0f, t2);
+		//			float fade = fade_in * fade_out; // 0..1
 
-	//			const float r0 = 1.4f * u0 * wave;
-	//			const float x0 = r0 * std::cos(v);
-	//			const float y0 = r0 * std::sin(v);
+
+		//			const float floor_k = 0.10f; 
+		//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
+		//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
+		//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
+
+		//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
+
+		//		}
+		//	}
+
+		//	
+		//	for (uint32_t iv = 0; iv <= V_STEPS; ++iv) {
+		//		const float t = float(iv) / float(V_STEPS);
+		//		const float v = v_min + (v_max - v_min) * t;
+
+		//		const float wave_speed = 2.0f; // how fast 
+		//		const float wave_freq = 3.0f;   // number of ripples 
+		//		const float wave_amp = 0.20f;  // radial modulation strength
+
+		//		const float wave = 1.0f + wave_amp * std::sin(wave_freq * v - wave_speed * time);
+
+		//		const uint8_t cr = 0xFF;
+		//		const uint8_t cg = uint8_t(0x60 + 0x80 * std::sin(v));
+		//		const uint8_t cb = 0x20;
+
+		//		for (uint32_t iu = 0; iu < U_STEPS; ++iu) {
+		//			const float u0 = (float(iu) / float(U_STEPS)) * U_MAX;
+		//			const float u1 = (float(iu + 1) / float(U_STEPS)) * U_MAX;
+
+		//			//p0: red-yelo lines coming out of the cone 
+
+		//			const float r0 = 1.4f * u0 * wave;
+		//			const float x0 = r0 * std::cos(v);
+		//			const float y0 = r0 * std::sin(v);
 
 
-	//			const float z0 = (c * v - z_min) * inv_z_range;
+		//			const float z0 = (c * v - z_min) * inv_z_range;
 
-	//			//p1:
-	//			const float x1 = r0 * u1 * std::cos(v);
-	//			const float y1 = r0 * u1 * std::sin(v);
-	//			const float z1 = (c * v - z_min) * inv_z_range;
+		//			//p1:
+		//			const float x1 = r0 * u1 * std::cos(v);
+		//			const float y1 = r0 * u1 * std::sin(v);
+		//			const float z1 = (c * v - z_min) * inv_z_range;
 
-	//			float t_fade = z0;
-	//			const float edge1 = 0.15f;
-	//			float fade_in = smoothstep(0.0f, edge1, t_fade);
-	//			float fade_out = 1.0f - smoothstep(1.0f - edge1, 1.0f, t_fade);
-	//			float fade = fade_in * fade_out;
+		//			float t_fade = z0;
+		//			const float edge1 = 0.15f;
+		//			float fade_in = smoothstep(0.0f, edge1, t_fade);
+		//			float fade_out = 1.0f - smoothstep(1.0f - edge1, 1.0f, t_fade);
+		//			float fade = fade_in * fade_out;
 
-	//			const float floor_k = 0.25f;
-	//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
-	//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
-	//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
+		//			const float floor_k = 0.25f;
+		//			uint8_t r2 = shade_to_black_floor(cr, fade, floor_k);
+		//			uint8_t g2 = shade_to_black_floor(cg, fade, floor_k);
+		//			uint8_t b2 = shade_to_black_floor(cb, fade, floor_k);
 
-	//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
-	//		}
-	//	}
+		//			push_line(x0, y0, z0, x1, y1, z1, r2, g2, b2, 0xFF);
+		//		}
+		//	}
 
-	//	assert(lines_vertices.size() == total_vertices);
-	//}
+		//	assert(lines_vertices.size() == total_vertices);
+		//}
+	}
 
 	{//make some crossing lines at differnt depths:
 		lines_vertices.clear();
@@ -726,6 +847,90 @@ void Tutorial::update(float dt) {
 		assert(lines_vertices.size() == count);
 
 	}
+	{ //make some objects:
+		object_instances.clear();
+
+		{ //plane translated +x by one unit:
+			mat4 WORLD_FROM_LOCAL{
+				1.0f, 0.0f, 0.0f, 0.0f,
+				0.0f, 1.0f, 0.0f, 0.0f,
+				0.0f, 0.0f, 1.0f, 0.0f,
+				1.0f, 0.0f, 0.0f, 1.0f,
+			};
+
+			object_instances.emplace_back(ObjectInstance{
+				.vertices = plane_vertices,
+				.transform{
+					.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+					.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+					.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+				},
+				});
+		}
+		{ //torus translated -x by one unit and rotated CCW around +y:
+			float ang = time / 60.0f * 2.0f * float(M_PI) * 10.0f;
+			float ca = std::cos(ang);
+			float sa = std::sin(ang);
+			mat4 WORLD_FROM_LOCAL{
+				  ca, 0.0f,  -sa, 0.0f,
+				0.0f, 1.0f, 0.0f, 0.0f,
+				  sa, 0.0f,   ca, 0.0f,
+				-1.0f,0.0f, 0.0f, 1.0f,
+			};
+
+			object_instances.emplace_back(ObjectInstance{
+				.vertices = torus_vertices,
+				.transform{
+					.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+					.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+					.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+				},
+				});
+		}
+	}
+	//{// make some objects:
+	//	object_instances.clear();
+
+	//	{//plane translate +x by one unit:
+	//		mat4 WORLD_FROM_LOCAL{
+	//			1.0f, 0.0f, 0.0f, 0.0f,
+	//			0.0f, 1.0f, 0.0f, 0.0f,
+	//			0.0f, 0.0f, 1.0f, 0.0f,
+	//			1.0f, 0.0f, 0.0f, 1.0f,
+	//		};
+
+	//		object_instances.emplace_back(ObjectInstance{
+	//			.vertices = plane_vertices,
+	//			.transform{
+	//				.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+	//				.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+	//				.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+	//			},	
+	//		});
+	//	}
+	//	{ // TORUS TRANSLATED -X BY ONE UNIT AND ROTATED CCW AROUND +Y 
+	//		float ang = time / 60.0f * 2.0f * float(M_PI) * 10.0f;
+	//		float ca = std::cos(ang);
+	//		float sa = std::sin(ang);
+
+	//		mat4 WORLD_FROM_LOCAL{
+	//			ca, 0.0f, -sa, 0.0f,
+	//			0.0f, 1.0f, 0.0f, 0.0f,
+	//			sa, 0.0f, ca, 0.0f,
+	//			-1.0f, 0.0f, 0.0f, 1.0f,
+	//		};
+
+	//		object_instances.emplace_back(ObjectInstance{
+	//			.vertices = torus_vertices,
+	//			.transform{
+	//				.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+	//				.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+	//				.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+	//			},
+	//		});
+	//	}
+
+	//}
 	
 
 }
