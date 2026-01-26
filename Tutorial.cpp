@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <algorithm>
 
 Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 	refsol::Tutorial_constructor(rtg, &depth_format, &render_pass, &command_pool);
@@ -162,43 +163,43 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 		std::vector < PosNorTexVertex > vertices;
 
 		
-		{ // A [-1,1] x [-1, 1 x {0} quadrilater:
-			plane_vertices.first = uint32_t(vertices.size());
-			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f},
-				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
-				.TexCoord{.s = 0.0f, .t = 0.0f },
-				});
+		//{ // A [-1,1] x [-1, 1 x {0} quadrilater:
+		//	plane_vertices.first = uint32_t(vertices.size());
+		//	vertices.emplace_back(PosNorTexVertex{
+		//		.Position{.x = -1.0f, .y = -1.0f, .z = 0.0f},
+		//		.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+		//		.TexCoord{.s = 0.0f, .t = 0.0f },
+		//		});
 
-			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x =1.0f, .y = -1.0f, .z = 0.0f},
-				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
-				.TexCoord{.s = 1.0f, .t = 0.0f },
-				});
+		//	vertices.emplace_back(PosNorTexVertex{
+		//		.Position{.x =1.0f, .y = -1.0f, .z = 0.0f},
+		//		.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+		//		.TexCoord{.s = 1.0f, .t = 0.0f },
+		//		});
 
-			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f},
-				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
-				.TexCoord{.s = 0.0f, .t = 1.0f },
-				});
-			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = 1.0f, .y = 1.0f, .z = 0.0f},
-				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
-				.TexCoord{.s = 1.0f, .t = 1.0f },
-				});
-			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f},
-				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
-				.TexCoord{.s = 0.0f, .t = 1.0f },
-				});
-			vertices.emplace_back(PosNorTexVertex{
-				.Position{.x = 1.0f, .y = -1.0f, .z = 0.0f},
-				.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
-				.TexCoord{.s = 1.0f, .t = 0.0f },
-				});
+		//	vertices.emplace_back(PosNorTexVertex{
+		//		.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f},
+		//		.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+		//		.TexCoord{.s = 0.0f, .t = 1.0f },
+		//		});
+		//	vertices.emplace_back(PosNorTexVertex{
+		//		.Position{.x = 1.0f, .y = 1.0f, .z = 0.0f},
+		//		.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+		//		.TexCoord{.s = 1.0f, .t = 1.0f },
+		//		});
+		//	vertices.emplace_back(PosNorTexVertex{
+		//		.Position{.x = -1.0f, .y = 1.0f, .z = 0.0f},
+		//		.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+		//		.TexCoord{.s = 0.0f, .t = 1.0f },
+		//		});
+		//	vertices.emplace_back(PosNorTexVertex{
+		//		.Position{.x = 1.0f, .y = -1.0f, .z = 0.0f},
+		//		.Normal {.x = 0.0f, .y = 0.0f, .z = 1.0f},
+		//		.TexCoord{.s = 1.0f, .t = 0.0f },
+		//		});
 
-				plane_vertices.count = uint32_t(vertices.size()) - plane_vertices.first;
-		}
+		//		plane_vertices.count = uint32_t(vertices.size()) - plane_vertices.first;
+		//}
 
 		{//a torus 
 			torus_vertices.first = uint32_t(vertices.size());
@@ -258,6 +259,204 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 
 		}
 
+		{ // wineglass (surface of revolution around +Z, height along +Z) + explicit bottom cap
+			// ---------- Genus-2 implicit mesh via marching tetrahedra ----------
+// Implicit surface:
+// 2y(y^2 - 3x^2)(1 - z^2) + (x^2 + y^2)^2 - (9z^2 - 1)(1 - z^2) = 0
+
+			auto f_genus2 = [](float x, float y, float z) -> float {
+				float x2 = x * x, y2 = y * y, z2 = z * z;
+				float one_minus_z2 = 1.0f - z2;
+				float term1 = 2.0f * y * (y2 - 3.0f * x2) * one_minus_z2;
+				float term2 = (x2 + y2) * (x2 + y2);
+				float term3 = (9.0f * z2 - 1.0f) * one_minus_z2;
+				return term1 + term2 - term3;
+				};
+
+			auto grad_genus2 = [&](float x, float y, float z) -> std::array<float, 3> {
+				// finite differences (robust, simple)
+				float eps = 1e-3f;
+				float fx1 = f_genus2(x + eps, y, z);
+				float fx0 = f_genus2(x - eps, y, z);
+				float fy1 = f_genus2(x, y + eps, z);
+				float fy0 = f_genus2(x, y - eps, z);
+				float fz1 = f_genus2(x, y, z + eps);
+				float fz0 = f_genus2(x, y, z - eps);
+				return { (fx1 - fx0) / (2.0f * eps),
+						 (fy1 - fy0) / (2.0f * eps),
+						 (fz1 - fz0) / (2.0f * eps) };
+				};
+
+			auto normalize3 = [](std::array<float, 3> v) -> std::array<float, 3> {
+				float len = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+				if (len < 1e-8f) return { 0.0f, 0.0f, 1.0f };
+				return { v[0] / len, v[1] / len, v[2] / len };
+				};
+
+			auto lerp3 = [](std::array<float, 3> a, std::array<float, 3> b, float t) -> std::array<float, 3> {
+				return { a[0] + t * (b[0] - a[0]),
+						 a[1] + t * (b[1] - a[1]),
+						 a[2] + t * (b[2] - a[2]) };
+				};
+
+			auto interp_zero = [&](std::array<float, 3> p0, std::array<float, 3> p1, float v0, float v1) -> std::array<float, 3> {
+				// assumes v0 and v1 have opposite signs (or one is 0)
+				float t = (std::abs(v1 - v0) < 1e-8f) ? 0.5f : (0.0f - v0) / (v1 - v0);
+				t = std::max(0.0f, std::min(1.0f, t));
+				return lerp3(p0, p1, t);
+				};
+
+			auto push_pnt = [&](std::array<float, 3> p) {
+				auto g = normalize3(grad_genus2(p[0], p[1], p[2]));
+
+				// simple UV: wrap around z axis + map z to t
+				float s = 0.5f + std::atan2(p[1], p[0]) / (2.0f * float(M_PI));
+				float t = 0.5f + 0.5f * p[2]; // if your bounds keep z in [-1,1]
+
+				vertices.emplace_back(PosNorTexVertex{
+					.Position{.x = p[0], .y = p[1], .z = p[2] },
+					.Normal  {.x = g[0], .y = g[1], .z = g[2] },
+					.TexCoord{.s = s,    .t = t    },
+					});
+				};
+
+			// Marching tetrahedra: split each cube into 6 tetrahedra.
+			// Cube corner ordering (0..7):
+			// 0:(0,0,0) 1:(1,0,0) 2:(1,1,0) 3:(0,1,0)
+			// 4:(0,0,1) 5:(1,0,1) 6:(1,1,1) 7:(0,1,1)
+			static const int tets[6][4] = {
+				{0,1,3,4},
+				{1,2,3,6},
+				{1,3,4,6},
+				{1,4,5,6},
+				{3,4,6,7},
+				{3,6,2,1} // (duplicate-ish split variant; fine, but you can choose a canonical set)
+			};
+
+			// A cleaner canonical 6-tet split (recommended) instead of the last line above:
+			static const int tets6[6][4] = {
+				{0,1,3,4},
+				{1,2,3,6},
+				{1,3,4,6},
+				{1,4,5,6},
+				{3,4,6,7},
+				{1,3,6,0}
+			};
+
+			auto emit_tet = [&](std::array<float, 3> const p[4], float const val[4]) {
+				// classify inside (<0) / outside (>=0)
+				int inside[4], outside[4];
+				int ni = 0, no = 0;
+				for (int i = 0; i < 4; ++i) {
+					if (val[i] < 0.0f) inside[ni++] = i;
+					else outside[no++] = i;
+				}
+
+				if (ni == 0 || ni == 4) return;
+
+				// edges are implicit between every pair; we only use the ones crossing the surface.
+				if (ni == 1) {
+					int a = inside[0];
+					int b = outside[0], c = outside[1], d = outside[2];
+					auto p_ab = interp_zero(p[a], p[b], val[a], val[b]);
+					auto p_ac = interp_zero(p[a], p[c], val[a], val[c]);
+					auto p_ad = interp_zero(p[a], p[d], val[a], val[d]);
+					// one triangle
+					push_pnt(p_ab); push_pnt(p_ac); push_pnt(p_ad);
+				}
+				else if (ni == 3) {
+					// complement of ni==1: flip winding by swapping
+					int a = outside[0];
+					int b = inside[0], c = inside[1], d = inside[2];
+					auto p_ab = interp_zero(p[a], p[b], val[a], val[b]);
+					auto p_ac = interp_zero(p[a], p[c], val[a], val[c]);
+					auto p_ad = interp_zero(p[a], p[d], val[a], val[d]);
+					// one triangle (reverse order)
+					push_pnt(p_ab); push_pnt(p_ad); push_pnt(p_ac);
+				}
+				else if (ni == 2) {
+					int a = inside[0], b = inside[1];
+					int c = outside[0], d = outside[1];
+
+					auto p_ac = interp_zero(p[a], p[c], val[a], val[c]);
+					auto p_ad = interp_zero(p[a], p[d], val[a], val[d]);
+					auto p_bc = interp_zero(p[b], p[c], val[b], val[c]);
+					auto p_bd = interp_zero(p[b], p[d], val[b], val[d]);
+
+					// quad split into two triangles
+					push_pnt(p_ac); push_pnt(p_ad); push_pnt(p_bd);
+					push_pnt(p_ac); push_pnt(p_bd); push_pnt(p_bc);
+				}
+				};
+
+			// ---- generate mesh in a bounding box ----
+			// The surface lives naturally with z in [-1,1] (because of (1 - z^2) factor).
+			// x,y extents: start with [-1.5, 1.5]; adjust if clipped.
+			genus2_vertices.first = uint32_t(vertices.size());
+
+			const int NX = 64, NY = 64, NZ = 64; // increase for smoother (cost grows quickly)
+			const float xmin = -1.5f, xmax = 1.5f;
+			const float ymin = -1.5f, ymax = 1.5f;
+			const float zmin = -1.0f, zmax = 1.0f;
+
+			auto gridPos = [&](int ix, int iy, int iz) -> std::array<float, 3> {
+				float x = xmin + (xmax - xmin) * (float(ix) / float(NX));
+				float y = ymin + (ymax - ymin) * (float(iy) / float(NY));
+				float z = zmin + (zmax - zmin) * (float(iz) / float(NZ));
+				return { x,y,z };
+				};
+
+			for (int iz = 0; iz < NZ; ++iz) {
+				for (int iy = 0; iy < NY; ++iy) {
+					for (int ix = 0; ix < NX; ++ix) {
+
+						std::array<float, 3> P[8] = {
+							gridPos(ix,   iy,   iz),
+							gridPos(ix + 1, iy,   iz),
+							gridPos(ix + 1, iy + 1, iz),
+							gridPos(ix,   iy + 1, iz),
+							gridPos(ix,   iy,   iz + 1),
+							gridPos(ix + 1, iy,   iz + 1),
+							gridPos(ix + 1, iy + 1, iz + 1),
+							gridPos(ix,   iy + 1, iz + 1),
+						};
+
+						float V[8] = {
+							f_genus2(P[0][0],P[0][1],P[0][2]),
+							f_genus2(P[1][0],P[1][1],P[1][2]),
+							f_genus2(P[2][0],P[2][1],P[2][2]),
+							f_genus2(P[3][0],P[3][1],P[3][2]),
+							f_genus2(P[4][0],P[4][1],P[4][2]),
+							f_genus2(P[5][0],P[5][1],P[5][2]),
+							f_genus2(P[6][0],P[6][1],P[6][2]),
+							f_genus2(P[7][0],P[7][1],P[7][2]),
+						};
+
+						// quick reject: all same sign -> no surface in this cube
+						int s = 0;
+						for (int i = 0; i < 8; ++i) s += (V[i] < 0.0f) ? 1 : 0;
+						if (s == 0 || s == 8) continue;
+
+						// process 6 tets
+						for (int t = 0; t < 6; ++t) {
+							int i0 = tets6[t][0], i1 = tets6[t][1], i2 = tets6[t][2], i3 = tets6[t][3];
+							std::array<float, 3> tp[4] = { P[i0], P[i1], P[i2], P[i3] };
+							float tv[4] = { V[i0], V[i1], V[i2], V[i3] };
+							emit_tet(tp, tv);
+						}
+					}
+				}
+			}
+
+			genus2_vertices.count = uint32_t(vertices.size()) - genus2_vertices.first;
+
+			// Now you can instance it with:
+			// .vertices = genus2_vertices
+			// -------------------------------------------------------------------
+
+		}
+
+
 
 
 		{//A single traingle:
@@ -300,20 +499,115 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 
 		{//textre 0 will be dark grey / light greak check baor with ared square at the origin.
 			//actual make the texture: 
-			uint32_t size = 128;
-			std::vector < uint32_t> data;
-			data.reserve(size* size);
-			for (uint32_t y = 0; y < size; ++y) {
-				float fy = (y + 0.5f) / float(size);
-				for (uint32_t x = 0; x < size; ++x) {
-					float fx = (x + 0.5f) / float(size);
+			//uint32_t size = 128;
+			//std::vector < uint32_t> data;
+			//data.reserve(size* size);
+			//for (uint32_t y = 0; y < size; ++y) {
+			//	float fy = (y + 0.5f) / float(size);
+			//	for (uint32_t x = 0; x < size; ++x) {
+			//		float fx = (x + 0.5f) / float(size);
 
-					//highlight the orgin: 
-					if (fx < 0.05f && fy < 0.05f) data.emplace_back(0xff0000ff); //red
-					else if ((fx < 0.5f) == (fy < 0.5f)) data.emplace_back(0xff444444); // dark grey
-					else  data.emplace_back(0xffbbbbbb); //light grey
+			//		//highlight the orgin: 
+			//		if (fx < 0.05f && fy < 0.05f) data.emplace_back(0xff0000ff); //red
+			//		else if ((fx < 0.5f) == (fy < 0.5f)) data.emplace_back(0xff444444); // dark grey
+			//		else  data.emplace_back(0xffbbbbbb); //light grey
+			//	}
+			//}
+
+			uint32_t size = 128;
+			std::vector<uint32_t> data;
+			data.reserve(size* size);
+
+			auto pack_rgba = [](uint8_t r, uint8_t g, uint8_t b, uint8_t a) -> uint32_t {
+				// matches your earlier 0xff0000ff style for VK_FORMAT_R8G8B8A8_UNORM on little-endian
+				return uint32_t(r) | (uint32_t(g) << 8) | (uint32_t(b) << 16) | (uint32_t(a) << 24);
+				};
+
+			auto frac = [](float x) -> float { return x - std::floor(x); };
+
+			// rotate UV by ~45 degrees to get diagonal tartan like your reference image
+			const float invSize = 1.0f / float(size);
+			const float s2 = 0.70710678f; // 1/sqrt(2)
+
+			for (uint32_t y = 0; y < size; ++y) {
+				for (uint32_t x = 0; x < size; ++x) {
+					// UV in [0,1)
+					float u = (float(x) + 0.5f) * invSize;
+					float v = (float(y) + 0.5f) * invSize;
+
+					// center then rotate:
+					float cx = u - 0.5f;
+					float cy = v - 0.5f;
+					float ru = (cx + cy) * s2;   // along one diagonal axis
+					float rv = (-cx + cy) * s2;   // along the other diagonal axis
+					// shift back to make them positive-ish (not required, but convenient)
+					ru += 0.5f;
+					rv += 0.5f;
+
+					// Large plaid blocks:
+					float U = frac(ru * 3.0f);   // 3 repeats across texture
+					float V = frac(rv * 3.0f);
+
+					bool bigU = (U < 0.50f);
+					bool bigV = (V < 0.50f);
+
+					// Base colors (roughly matching your example: black/white/greys)
+					// We'll choose a dark + light pair and mix by block parity:
+					uint8_t r0 = 0, g0 = 0, b0 = 0;         // black
+					uint8_t r1 = 0xbb, g1 = 0xbb, b1 = 0xbb; // light grey
+					uint8_t r2 = 0x66, g2 = 0x66, b2 = 0x66; // mid grey
+					uint8_t r3 = 0xee, g3 = 0xee, b3 = 0xee; // near-white
+
+					// Pick a base block color:
+					uint8_t br, bg, bb;
+					if (bigU == bigV) { // diagonal “checker” feel
+						// alternate between light grey and near-white with a sub-band
+						br = (U < 0.25f || U > 0.75f || V < 0.25f || V > 0.75f) ? r3 : r1;
+						bg = (U < 0.25f || U > 0.75f || V < 0.25f || V > 0.75f) ? g3 : g1;
+						bb = (U < 0.25f || U > 0.75f || V < 0.25f || V > 0.75f) ? b3 : b1;
+					}
+					else {
+						// alternate between black and mid grey
+						br = (U < 0.18f || V < 0.18f) ? r0 : r2;
+						bg = (U < 0.18f || V < 0.18f) ? g0 : g2;
+						bb = (U < 0.18f || V < 0.18f) ? b0 : b2;
+					}
+
+					// Weave micro-texture (tiny checker) to mimic fabric:
+					// (subtle brightness modulation)
+					uint32_t weave = ((x ^ y) & 3u); // 0..3
+					float weaveMul = (weave == 0u) ? 0.92f : (weave == 1u ? 0.97f : (weave == 2u ? 1.03f : 1.08f));
+					auto mul8 = [&](uint8_t c) -> uint8_t {
+						int ic = int(std::round(float(c) * weaveMul));
+						if (ic < 0) ic = 0;
+						if (ic > 255) ic = 255;
+						return uint8_t(ic);
+						};
+					br = mul8(br); bg = mul8(bg); bb = mul8(bb);
+
+					// Thin red stripes (tartan accent):
+					// Put stripes in both rotated axes so they cross.
+					auto stripe = [&](float t, float freq, float center, float halfWidth) -> bool {
+						float f = frac(t * freq);
+						float d = std::abs(f - center);
+						d = std::min(d, 1.0f - d); // wrap distance on [0,1)
+						return d < halfWidth;
+						};
+
+					bool red1 = stripe(ru, 6.0f, 0.12f, 0.012f) || stripe(ru, 6.0f, 0.62f, 0.012f);
+					bool red2 = stripe(rv, 6.0f, 0.12f, 0.012f) || stripe(rv, 6.0f, 0.62f, 0.012f);
+
+					if (red1 || red2) {
+						// keep some fabric showing through (slightly dark red)
+						br = uint8_t(std::min(255, int(br * 0.25f + 200.0f)));
+						bg = uint8_t(std::min(255, int(bg * 0.15f + 20.0f)));
+						bb = uint8_t(std::min(255, int(bb * 0.15f + 20.0f)));
+					}
+
+					data.emplace_back(pack_rgba(br, bg, bb, 0xff));
 				}
 			}
+			assert(data.size() == size * size);
 
 			//make palce for textur eto live on the GPU
 			textures.emplace_back(rtg.helpers.create_image(
@@ -332,7 +626,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 		{
 			//texture 1 will be the 'xor' texture
 			//actually make the texture:
-			uint32_t size = 256;
+			/*uint32_t size = 256;
 			std::vector< uint32_t > data;
 			data.reserve(size* size);
 			for (uint32_t y = 0; y < size; ++y) {
@@ -342,6 +636,126 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 					uint8_t b = uint8_t(x) ^ uint8_t(y + 27);
 					uint8_t a = 0xff;
 					data.emplace_back(uint32_t(r) | (uint32_t(g) << 8) | (uint32_t(b) << 16) | (uint32_t(a) << 24));
+				}
+			}*/
+
+			uint32_t size = 256;
+			std::vector<uint32_t> data;
+			data.resize(size* size);
+
+
+			struct Vec3 { float x, y, z; };
+
+			auto lerp = [](float a, float b, float t) { return a + t * (b - a); };
+			auto fade = [](float t) { return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f); };
+			auto clamp01 = [](float x) { return std::max(0.0f, std::min(1.0f, x)); };
+
+			// Hash for unsigned lattice coordinates:
+			auto hash2u = [](uint32_t x, uint32_t y, uint32_t seed) -> uint32_t {
+				uint32_t h = seed;
+				h ^= x + 0x9e3779b9u + (h << 6) + (h >> 2);
+				h ^= y + 0x9e3779b9u + (h << 6) + (h >> 2);
+				h ^= h >> 16; h *= 0x7feb352du;
+				h ^= h >> 15; h *= 0x846ca68bu;
+				h ^= h >> 16;
+				return h;
+				};
+
+			// Tileable value noise in [0,1] using uint32_t lattice:
+			auto value_noise = [&](float x, float y, uint32_t period, uint32_t seed) -> float {
+				// x,y are non-negative in this use, so uint32_t floor is safe:
+				uint32_t x0 = uint32_t(std::floor(x));
+				uint32_t y0 = uint32_t(std::floor(y));
+				uint32_t x1 = x0 + 1u;
+				uint32_t y1 = y0 + 1u;
+
+				auto modp = [&](uint32_t v) -> uint32_t {
+					return (period == 0u) ? 0u : (v % period);
+					};
+
+				float fx = x - float(x0);
+				float fy = y - float(y0);
+
+				float u = fade(fx);
+				float v = fade(fy);
+
+				float n00 = (hash2u(modp(x0), modp(y0), seed) & 0xffffu) / 65535.0f;
+				float n10 = (hash2u(modp(x1), modp(y0), seed) & 0xffffu) / 65535.0f;
+				float n01 = (hash2u(modp(x0), modp(y1), seed) & 0xffffu) / 65535.0f;
+				float n11 = (hash2u(modp(x1), modp(y1), seed) & 0xffffu) / 65535.0f;
+
+				float nx0 = lerp(n00, n10, u);
+				float nx1 = lerp(n01, n11, u);
+				return lerp(nx0, nx1, v);
+				};
+
+			// fBm (tileable) with uint32_t periods:
+			auto fbm = [&](float x, float y, uint32_t period, uint32_t seed) -> float {
+				float sum = 0.0f;
+				float amp = 0.5f;
+				float freq = 1.0f;
+				float norm = 0.0f;
+
+				for (uint32_t o = 0; o < 5u; ++o) {
+					uint32_t p = period * uint32_t(freq); // freq is 1,2,4,8,16 => exact in float
+					sum += amp * value_noise(x * freq, y * freq, p, seed + 1013u * o);
+					norm += amp;
+					amp *= 0.5f;
+					freq *= 2.0f;
+				}
+				return sum / std::max(1e-6f, norm);
+				};
+
+			auto pack_rgba = [](float r, float g, float b, float a) -> uint32_t {
+				auto to_u8 = [](float x) -> uint32_t {
+					int v = int(std::round(std::max(0.0f, std::min(1.0f, x)) * 255.0f));
+					return uint32_t(v);
+					};
+				uint32_t R = to_u8(r);
+				uint32_t G = to_u8(g);
+				uint32_t B = to_u8(b);
+				uint32_t A = to_u8(a);
+				// 0xAABBGGRR (matches your constants)
+				return (A << 24) | (B << 16) | (G << 8) | (R << 0);
+				};
+
+			// Parameters:
+			const uint32_t seed = 1337u;
+			const uint32_t period = 64u;      // tile period
+			const float veinFreq = 8.0f;
+			const float warpAmp = 2.25f;
+			const float turbScale = 6.0f;
+			const float contrast = 1.25f;
+
+			const Vec3 baseLight{ 0.86f, 0.87f, 0.90f };
+			const Vec3 baseDark{ 0.20f, 0.22f, 0.28f };
+			const Vec3 tint{ 0.02f, 0.05f, 0.08f };
+
+			for (uint32_t y = 0; y < size; ++y) {
+				for (uint32_t x = 0; x < size; ++x) {
+					float u = (x + 0.5f) / float(size);
+					float v = (y + 0.5f) / float(size);
+
+					float px = u * float(period);
+					float py = v * float(period);
+
+					float t = fbm(px * turbScale, py * turbScale, period, seed);
+					float warp = (t * 2.0f - 1.0f) * warpAmp;
+
+					const float TWO_PI = 6.28318530718f;
+					float phase = (px + warp) * veinFreq;
+					float veins = 0.5f + 0.5f * std::sin(TWO_PI * phase);
+
+					float grain = fbm(px * 3.0f + 17.0f, py * 3.0f - 29.0f, period, seed ^ 0x9e3779b9u);
+					grain = (grain - 0.5f) * 0.08f;
+
+					float m = clamp01(std::pow(veins, contrast) + grain);
+
+					float r = lerp(baseDark.x, baseLight.x, m) + tint.x * (1.0f - m);
+					float g = lerp(baseDark.y, baseLight.y, m) + tint.y * (1.0f - m);
+					float b = lerp(baseDark.z, baseLight.z, m) + tint.z * (1.0f - m);
+
+					data[y * size + x] = pack_rgba(r, g, b, 1.0f);
 				}
 			}
 			assert(data.size() == size * size);
@@ -866,6 +1280,13 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		if(!object_instances.empty()){//draw with the object pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
 			
+			{//push time:
+				ObjectsPipeline::Push push{
+					.time = float(time),
+				};
+				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+			}
+
 			{//use object vertices (offset 0 ) as vertex buffer binging 0:
 				
 				std::array < VkBuffer, 1 > vertex_buffers{ object_vertices.handle };
@@ -1117,63 +1538,63 @@ void Tutorial::update(float dt) {
 		//}
 	}
 
-	{//make some crossing lines at differnt depths:
-		lines_vertices.clear();
-		constexpr size_t count = 2 * 30 + 2 * 30;
-		lines_vertices.reserve(count);
+	//{//make some crossing lines at differnt depths:
+	//	lines_vertices.clear();
+	//	constexpr size_t count = 2 * 30 + 2 * 30;
+	//	lines_vertices.reserve(count);
 
-		//hoirizontal lines at z = 0.5 :
-		for (uint32_t i = 0; i < 30;++i) {
-			float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
-			lines_vertices.emplace_back(PosColVertex{
-				.Position{ .x = -1.0f, .y = y, .z = 0.5f},
-				.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
-				});
-		lines_vertices.emplace_back(PosColVertex{
-				.Position{.x = 1.0f, .y = y, .z = 0.5f},
-				.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
-				});
+	//	//hoirizontal lines at z = 0.5 :
+	//	for (uint32_t i = 0; i < 30;++i) {
+	//		float y = (i + 0.5f)/ 30.0f * 2.0f - 1.0f;
+	//		lines_vertices.emplace_back(PosColVertex{
+	//			.Position{ .x = -1.0f, .y = y, .z = 0.5f},
+	//			.Color {.r = 0xff, .g= 0xff, .b = 0x00, .a  = 0xff},
+	//			});
+	//	lines_vertices.emplace_back(PosColVertex{
+	//			.Position{.x = 1.0f, .y = y, .z = 0.5f},
+	//			.Color {.r = 0xff, .g = 0xff, .b = 0x00, .a = 0xff},
+	//			});
 
-		}
+	//	}
 
-		//vetical lines at z = 0.0 (near) through 1.0 far:
-		for (uint32_t i = 0; i < 30;++i) {
-			float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
-			float z = (i + 0.5f) / 30.0f;
-		lines_vertices.emplace_back(PosColVertex{
-				.Position{.x = x, .y = -1.0f, .z = z},
-				.Color {.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff},
-				});
-			lines_vertices.emplace_back(PosColVertex{
-				.Position{.x = x, .y = 1.0f, .z = z},
-				.Color {.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff},
-				});
-		}
-		assert(lines_vertices.size() == count);
+	//	//vetical lines at z = 0.0 (near) through 1.0 far:
+	//	for (uint32_t i = 0; i < 30;++i) {
+	//		float x = (i + 0.5f) / 30.0f * 2.0f - 1.0f;
+	//		float z = (i + 0.5f) / 30.0f;
+	//	lines_vertices.emplace_back(PosColVertex{
+	//			.Position{.x = x, .y = -1.0f, .z = z},
+	//			.Color {.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff},
+	//			});
+	//		lines_vertices.emplace_back(PosColVertex{
+	//			.Position{.x = x, .y = 1.0f, .z = z},
+	//			.Color {.r = 0x00, .g = 0x00, .b = 0xff, .a = 0xff},
+	//			});
+	//	}
+	//	assert(lines_vertices.size() == count);
 
-	}
+	//}
 	{ //make some objects:
 		object_instances.clear();
 
-		{ //plane translated +x by one unit:
-			mat4 WORLD_FROM_LOCAL{
-				1.0f, 0.0f, 0.0f, 0.0f,
-				0.0f, 1.0f, 0.0f, 0.0f,
-				0.0f, 0.0f, 1.0f, 0.0f,
-				1.0f, 0.0f, 0.0f, 1.0f,
-			};
+		//{ //plane translated +x by one unit:
+		//	mat4 WORLD_FROM_LOCAL{
+		//		1.0f, 0.0f, 0.0f, 0.0f,
+		//		0.0f, 1.0f, 0.0f, 0.0f,
+		//		0.0f, 0.0f, 1.0f, 0.0f,
+		//		1.0f, 0.0f, 0.0f, 1.0f,
+		//	};
 
-			object_instances.emplace_back(ObjectInstance{
-				.vertices = plane_vertices,
-				.transform{
-					.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
-					.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
-					.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
-				},
-				.texture = 1,
-				});
-			
-		}
+		//	object_instances.emplace_back(ObjectInstance{
+		//		.vertices = plane_vertices,
+		//		.transform{
+		//			.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+		//			.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+		//			.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+		//		},
+		//		.texture = 1,
+		//		});
+		//	
+		//}
 		{ //torus translated -x by one unit and rotated CCW around +y:
 			float ang = time / 60.0f * 2.0f * float(M_PI) * 10.0f;
 			float ca = std::cos(ang);
@@ -1192,6 +1613,25 @@ void Tutorial::update(float dt) {
 					.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
 					.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
 				},
+				});
+		}
+
+		{ // wineglass instance
+			mat4 WORLD_FROM_LOCAL{
+				1.0f,0.0f,0.0f,0.0f,
+				0.0f,1.0f,0.0f,0.0f,
+				0.0f,0.0f,1.0f,0.0f,
+				0.0f,0.0f,0.0f,1.0f,
+			};
+
+			object_instances.emplace_back(ObjectInstance{
+				.vertices = genus2_vertices,   // <-- ObjectVertices slice
+				.transform{
+					.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+					.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+					.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+				},
+				.texture = 1,
 				});
 		}
 	}
