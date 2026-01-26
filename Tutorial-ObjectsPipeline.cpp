@@ -53,25 +53,6 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set1_Transforms));
 	}
 
-
-	{ //create pipline layout
-		std::array < VkDescriptorSetLayout, 2> layouts{
-			set1_Transforms, //we'd like to say VK_NULLHJANDLE her but that no invoad without an extnetion
-			set1_Transforms,
-			set2_Texture,
-		};
-
-		VkPipelineLayoutCreateInfo create_info{
-			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-			.setLayoutCount = uint32_t(layouts.size()),
-			.pSetLayouts = layouts.data(),
-			.pushConstantRangeCount = 0,
-			.pPushConstantRanges = nullptr,
-		};
-
-		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
-	}
-
 	{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
 		std::array< VkDescriptorSetLayoutBinding, 1> bindings{
 			VkDescriptorSetLayoutBinding{
@@ -94,7 +75,7 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 
 	{ //create pipline layout
 		std::array < VkDescriptorSetLayout, 3> layouts{
-			set1_Transforms, //we'd like to say VK_NULLHJANDLE her but that no invoad without an extnetion
+			set0_World, 
 			set1_Transforms,
 			set2_TEXTURE,
 		};

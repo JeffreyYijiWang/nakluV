@@ -139,14 +139,14 @@ void Helpers::transfer_to_image(void const *data, size_t size, AllocatedImage &t
 
 
 	// begine recording a command bufer 
-	VK(vkResetCommmandBuffer(transfer_command_buffer, 0));
+	VK(vkResetCommandBuffer(transfer_command_buffer, 0));
 
 	VkCommandBufferBeginInfo begin_info{
 		.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 		.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, //will record again eveyr submit 
 	};
 
-	VK(vkBeginCommandBuffer(transfer_command_buffer, &begin_info);
+	VK(vkBeginCommandBuffer(transfer_command_buffer, &begin_info));
 
 	VkImageSubresourceRange whole_image{
 		.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -202,7 +202,7 @@ void Helpers::transfer_to_image(void const *data, size_t size, AllocatedImage &t
 
 		vkCmdCopyBufferToImage(
 			transfer_command_buffer,
-			transfer_src_handle,
+			transfer_src.handle,
 			target.handle,
 			VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			1, &region
@@ -219,14 +219,14 @@ void Helpers::transfer_to_image(void const *data, size_t size, AllocatedImage &t
 			.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
 			.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 			.image = target.handle,
 			.subresourceRange = whole_image,
 		};
 
 		vkCmdPipelineBarrier(
-			transfer_coimmand_buffer,  //commandBuffer
+			transfer_command_buffer,  //commandBuffer
 			VK_PIPELINE_STAGE_TRANSFER_BIT,  //srcStageMask
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,  //dstStageMask
 			0, //dependcy flabgs
