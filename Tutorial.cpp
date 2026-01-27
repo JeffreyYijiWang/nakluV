@@ -3,6 +3,7 @@
 #include "VK.hpp"
 #include "refsol.hpp"
 	
+#include <GLFW/glfw3.h>
 
 #include <array>
 #include <cassert>
@@ -927,19 +928,34 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 void Tutorial::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
-	{//ROTATING =CAMER THE ORIGIN	
+	if(camera_mode == CameraMode::Scene)
+	{
+		//camera rotating around the origin: 
 		float ang = float(M_PI) * 2.0f * 10.0f * (time / 60.0f);
 		CLIP_FROM_WORLD = perspective(
-			60.0f * float(M_PI) / 180.0f,//vfov
+			60.0f * float(M_PI / 180.0f), //vfov 
 			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), //aspect
-			0.1f, //new
-			1000.0f //far
+			0.1f, // near 
+			1000.0f //far 
 		) * look_at(
 			3.0f * std::cos(ang), 3.0f * std::sin(ang), 1.0f, //eye
-			0.0f, 0.0f, 0.5f, //target
+			0.0f, 0.0f, 0.5f, //target 
 			0.0f, 0.0f, 1.0f //up
 		);
-
+	}
+	else if (camera_mode == CameraMode::Free) {
+		CLIP_FROM_WORLD = perspective(
+			free_camera.fov,
+			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
+			free_camera.near,
+			free_camera.far
+			) * orbit(
+				free_camera.target_x, free_camera.target_y, free_camera.target_z, 
+				free_camera.azimuth, free_camera.elevation, free_camera.radius
+			);
+	}
+	else {
+		assert(0 && "only two camera modes");
 	}
 
 	{//static sun and sky 
@@ -1199,5 +1215,109 @@ void Tutorial::update(float dt) {
 }
 
 
-void Tutorial::on_input(InputEvent const &) {
+void Tutorial::on_input(InputEvent const &evt) {
+	//if there is a current saction, it get input priority: 
+	if (action) {
+		action(evt);
+		return;
+	}
+
+
+	//general controls:
+	if (evt.type == InputEvent::KeyDown && evt.key.key == GLFW_KEY_TAB) {
+		// swithc camera mode 
+		camera_mode = CameraMode((int(camera_mode) + 1) % 2);
+		return;
+	}
+
+	//free camera controls:
+	if (camera_mode == CameraMode::Free) {
+		if (evt.type == InputEvent::MouseWheel) {
+			//change distance by 10% every scoll click : 
+			free_camera.radius *= std::exp(std::log(1.1f) * -evt.wheel.y);
+
+			//make sure camera isn't too close or too far from target: 
+			free_camera.radius = std::max(free_camera.radius, 0.5f * free_camera.near);
+			free_camera.radius = std::min(free_camera.radius, 2.0f * free_camera.far);
+			return;
+		}
+
+		if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT && (evt.button.mods & GLFW_MOD_SHIFT)) {
+			//start panning
+			
+			float init_x = evt.button.x;
+			float init_y = evt.button.y;
+			OrbitCamera init_camera = free_camera;
+
+
+			action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
+				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
+					//cancle uypon button lifted: 
+					action = nullptr;
+					return;
+				}
+				if (evt.type == InputEvent::MouseMotion) {
+					//handle motion 
+
+					//image height at plane of target pont: 
+					float height = 2.0f * std::tan(free_camera.fov * 0.5f) * free_camera.radius;
+
+					//motion, therefore at target piont: 
+					float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height * height;
+					float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height * height;
+					//negative belcoe glfw useing y-down coordinat system 
+
+
+					//compute camera transform to extract right 
+					mat4 camera_from_world = orbit(
+						init_camera.target_x, init_camera.target_y, init_camera.target_z,
+						init_camera.azimuth, init_camera.elevation, init_camera.radius
+					);
+
+					//move the desiere ddistance
+					free_camera.target_x = init_camera.target_x - dx * camera_from_world[0] - dy * camera_from_world[1];
+					free_camera.target_y = init_camera.target_y - dx * camera_from_world[4] - dy * camera_from_world[5];
+					free_camera.target_z = init_camera.target_z - dx * camera_from_world[8] - dy * camera_from_world[9];
+
+					return;
+				}
+				};
+
+		}
+		else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
+			//start tumbling
+
+
+			float init_x = evt.button.x;
+			float init_y = evt.button.y;
+			OrbitCamera init_camera = free_camera;
+
+			action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
+				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
+					action = nullptr; 
+					return;
+				}
+				if (evt.type == InputEvent::MouseMotion) {
+					//motion, normalized so 1.0 is window height:
+					float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height;
+				float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height; //note: negated because glfw uses y-down coordinate system
+
+					//rotate camera based on motion:
+					float speed = float(M_PI); //how much rotation happens at one full window height
+					float flip_x = (std::abs(init_camera.elevation) > 0.5f * float(M_PI) ? -1.0f : 1.0f); //switch azimuth rotation when camera is upside-down
+					free_camera.azimuth = init_camera.azimuth - dx * speed * flip_x;
+					free_camera.elevation = init_camera.elevation - dy * speed;
+
+					//reduce azimuth and elevation to [-pi,pi] range:
+					const float twopi = 2.0f * float(M_PI);
+					free_camera.azimuth -= std::round(free_camera.azimuth / twopi) * twopi;
+					free_camera.elevation -= std::round(free_camera.elevation / twopi) * twopi;
+					return;
+				}
+			};
+
+			return;
+		}
+
+	}
 }

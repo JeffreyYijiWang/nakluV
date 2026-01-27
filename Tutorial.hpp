@@ -162,8 +162,29 @@ struct Tutorial : RTG::Application {
 	virtual void update(float dt) override;
 	virtual void on_input(InputEvent const &) override;
 
+	//modal action, intercepts inputs:
+	std::function< void(InputEvent const&)> action;
+
 	float time = 0.0f;
 
+	//for selection between cameras: 
+	enum class CameraMode {
+		Scene = 0, 
+		Free = 1, 
+	} camera_mode = CameraMode::Free;
+
+	//used when camera_mode  = CameraMode::Free: 
+	struct OrbitCamera {
+		float target_x = 0.0f, target_y = 0.0f, target_z = 0.0f; //where the caerm is looking + orginting 
+		float radius = 2.0f; //distancing crom thje camera 
+		float azimuth = 0.0f;  //counterclockwise angle around z axis between x axis and camera direction (radian) 
+		float elevation = 0.25f * float(M_PI); // angle up from xy plane to camera direction(radian s)
+		float fov = 60.0f / 180.0f * float(M_PI); //vertical field of view (radians)
+		float near = 0.1f; // near clippingplan 
+		float far = 1000.0f; // far clipping plane
+	} free_camera;
+
+	//computer dd form the current camera (as set by camera_mode) during ujpdate()
 	mat4 CLIP_FROM_WORLD;
 
 	std::vector < LinesPipeline::Vertex > lines_vertices;
