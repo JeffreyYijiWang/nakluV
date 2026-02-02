@@ -229,6 +229,7 @@ RTG::RTG(Configuration const &configuration_) : helpers(*this) {
 			VkPhysicalDeviceProperties properties;
 			vkGetPhysicalDeviceProperties(physical_device, &properties);
 			std::cout << "Selected physical device '" << properties.deviceName << "'." << std::endl;
+
 		}
 	}
 	//select the `surface_format` and `present_mode` which control how colors are represented on the surface and how new images are supplied to the surface:
@@ -248,6 +249,19 @@ RTG::RTG(Configuration const &configuration_) : helpers(*this) {
 			VK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &count, nullptr));
 			present_modes.resize(count);
 			VK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &count, present_modes.data()));
+		}
+
+
+		{//priinting out surface and present modes
+			std::cout << "Surface formats supported: \n";
+			for (auto const& f : formats) {
+				std::cout << string_VkFormat(f.format) << "\n";
+			}
+
+			std::cout << "Present modes supported:\n";
+			for (auto const& pm : present_modes) {
+				std::cout << "  " << string_VkPresentModeKHR(pm) << "\n";
+			}
 		}
 
 		//find first available surface format matching config:
