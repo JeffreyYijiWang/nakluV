@@ -153,7 +153,7 @@ struct RTG {
 	//inherit from application to make something to pass to run:
 	struct Application {
 		//handle user input: (called when user interacts)
-		virtual void on_input(InputEvent const &) = 0;
+		virtual void on_input(InputEvent const&) = 0;
 
 		//[re]create resources when swapchain is recreated: (called at start of run() and when window is resized)
 		virtual void on_swapchain(RTG &, SwapchainEvent const &) = 0;
