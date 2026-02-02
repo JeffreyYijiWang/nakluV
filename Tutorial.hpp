@@ -88,6 +88,9 @@ struct Tutorial : RTG::Application {
 		};
 		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
 		// no push constnat s
+		struct Push {
+			float time;
+		};
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
@@ -139,6 +142,7 @@ struct Tutorial : RTG::Application {
 	};
 	ObjectVertices plane_vertices;
 	ObjectVertices torus_vertices;
+	ObjectVertices genus2_vertices;
 
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
