@@ -666,6 +666,8 @@ void RTG::recreate_swapchain() {
 			swapchain_images.resize(count);
 			VK(vkGetSwapchainImagesKHR(device, swapchain, &count, swapchain_images.data()));
 		}
+
+			}
 		// make image views
 		swapchain_image_views.assign(swapchain_images.size(), VK_NULL_HANDLE);
 		for (size_t i = 0; i < swapchain_images.size(); ++i) {
@@ -705,7 +707,7 @@ void RTG::recreate_swapchain() {
 		if (configuration.debug) {
 			std::cout << "Swapchain is now " << swapchain_images.size() << " images of size " << swapchain_extent.width << "x" << swapchain_extent.height << "." << std::endl;
 		}
-	}
+
 }
 
 
@@ -897,12 +899,6 @@ void RTG::run(Application &application) {
 		glfwSetScrollCallback(window, scroll_callback);
 		glfwSetKeyCallback(window, key_callback);
 	}
-	glfwSetWindowUserPointer(window, &event_queue);
-
-	glfwSetCursorPosCallback(window, cursor_pos_callback);
-	glfwSetMouseButtonCallback(window, mouse_button_callback);
-	glfwSetScrollCallback(window, scroll_callback);
-	glfwSetKeyCallback(window, key_callback);
 
 	uint32_t headless_next_image = 0;
 	//setup time handling
