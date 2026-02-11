@@ -44,11 +44,26 @@ void RTG::Configuration::parse(int argc, char **argv) {
 				};
 			surface_extent.width = conv("width");
 			surface_extent.height = conv("height");
+		}
+		else if (arg == "--scene") {
+			if (argi + 1 >= argc) throw std::runtime_error("--scene requires a parameter (a .72 format scene path).");
+
+			argi += 1;
+			scene_path = argv[argi];
+		}
+		else if (arg == "--camera") {
+			argi += 1;
+			scene_camera = argv[argi];
 		} else if (arg == "--headless") {
 			headless = true;
 		} else {
 			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
 		}
+	}
+
+
+	if (scene_path == "") {
+		throw std::runtime_error("Have to set scene path to run.");
 	}
 }
 
@@ -57,6 +72,7 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--physical-device <name>", "Run on the named physical device (guesses, otherwise).");
 	callback("--drawing-size <w> <h>", "Set the size of the surface to draw to.");
 	callback("--headless", "Don't create a window; read events from stdin.");
+	callback("--scene <p>", "Read the scene file in .s72 format.");
 }
 
 
@@ -763,9 +779,11 @@ static void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos) {
 	InputEvent event;
 	std::memset(&event, '\0', sizeof(event));
 
+	int width, height;
+	glfwGetWindowSize(window, &width, &height);
 	event.type = InputEvent::MouseMotion;
-	event.motion.x = float(xpos);
-	event.motion.y = float(ypos);
+	event.motion.x = float(xpos) / float(width);
+	event.motion.y = float(ypos) / float(height);
 	event.motion.state = 0;
 	for (int b = 0; b < 8 && b < GLFW_MOUSE_BUTTON_LAST; ++b) {
 		if (glfwGetMouseButton(window, b) == GLFW_PRESS) {

@@ -1,18 +1,24 @@
 #pragma once
 
 #include "PosColVertex.hpp"
-#include "PosNorTexVertex.hpp"
+#include "PosNorTanTexVertex.hpp"
 #include "mat4.hpp"
 #include "RTG.hpp"
+#include "scene.hpp"
+#include "GLM.hpp"
+
 
 struct Tutorial : RTG::Application {
 
-	Tutorial(RTG &);
+	Tutorial(RTG &, Scene &);
 	Tutorial(Tutorial const &) = delete; //you shouldn't be copying this object
 	~Tutorial();
 
 	//kept for use in destructor:
 	RTG &rtg;
+
+	//scene caintin infomration
+	Scene& scene;
 
 	//--------------------------------------------------------------------
 	//Resources that last the lifetime of the application:
@@ -47,7 +53,8 @@ struct Tutorial : RTG::Application {
 
 		//types for descriptors:
 		struct Camera {
-			mat4 CLIP_FROM_WORLD;
+			/*mat4 CLIP_FROM_WORLD;*/
+			glm::mat4x4 CLIP_FROM_WORLD;
 		};
 		static_assert(sizeof(Camera) == 16 * 4, "camera buffer structure is packed");
 
@@ -82,9 +89,12 @@ struct Tutorial : RTG::Application {
 
 		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4, "World is the expected size.");
 		struct Transform {
-			mat4 CLIP_FROM_LOCAL;
+		/*	mat4 CLIP_FROM_LOCAL;
 			mat4 WORLD_FROM_LOCAL;
-			mat4 WORLD_FROM_LOCAL_NORMAL;
+			mat4 WORLD_FROM_LOCAL_NORMAL;*/
+			glm::mat4x4 CLIP_FROM_LOCAL;
+			glm::mat4x4 WORLD_FROM_LOCAL;
+			glm::mat4x4 WORLD_FROM_LOCAL_NORMAL;
 		};
 		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
 		// no push constnat s
@@ -94,7 +104,7 @@ struct Tutorial : RTG::Application {
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
-		using Vertex = PosNorTexVertex;
+		using Vertex = PosNorTanTexVertex;
 
 		VkPipeline handle = VK_NULL_HANDLE;
 
@@ -140,9 +150,7 @@ struct Tutorial : RTG::Application {
 		uint32_t first = 0;
 		uint32_t count = 0;
 	};
-	ObjectVertices plane_vertices;
-	ObjectVertices torus_vertices;
-	ObjectVertices genus2_vertices;
+	std::vector<ObjectVertices> mesh_vertices;
 
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
@@ -189,7 +197,7 @@ struct Tutorial : RTG::Application {
 	} free_camera;
 
 	//computer dd form the current camera (as set by camera_mode) during ujpdate()
-	mat4 CLIP_FROM_WORLD;
+	glm::mat4x4 CLIP_FROM_WORLD;
 
 	std::vector < LinesPipeline::Vertex > lines_vertices;
 

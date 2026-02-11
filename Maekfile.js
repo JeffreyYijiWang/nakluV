@@ -28,11 +28,16 @@ custom_flags_and_rules();
 // it returns the path to the output object file
 const main_objs = [
 	maek.CPP('Tutorial.cpp'),
+	maek.CPP('RTG.cpp'),
 	maek.CPP('PosColVertex.cpp'),
 	maek.CPP('PosNorTexVertex.cpp'),
-	maek.CPP('RTG.cpp'),
 	maek.CPP('Helpers.cpp'),
 	maek.CPP('main.cpp'),
+	maek.CPP('PosNorTanTexVertex.cpp'),
+	maek.CPP('scene.cpp'),
+	maek.CPP('data_path.cpp'),
+	//maek.CPP('stb_image_wrapper.cpp'),
+	maek.CPP('../Lib/sejp.cpp'),
 ];
 
 //maek.GLSLC(...) builds a glsl source file:
@@ -43,21 +48,21 @@ const background_shaders = [
 	maek.GLSLC('background.vert'),
 	maek.GLSLC('background.frag'),
 ];
-main_objs.push( maek.CPP('Tutorial-BackgroundPipeline.cpp', undefined, { depends:[...background_shaders] } ) );
+main_objs.push( maek.CPP('A1-BackgroundPipeline.cpp', undefined, { depends:[...background_shaders] } ) );
 
 //uncomment to build lines shaders and pipeline:
 const lines_shaders = [
 	maek.GLSLC('lines.vert'),
 	maek.GLSLC('lines.frag'),
 ];
-main_objs.push( maek.CPP('Tutorial-LinesPipeline.cpp', undefined, { depends:[...lines_shaders] } ) );
+main_objs.push( maek.CPP('A1-LinesPipeline.cpp', undefined, { depends:[...lines_shaders] } ) );
 
 //uncomment to build objects shaders and pipeline:
 const objects_shaders = [
 	maek.GLSLC('objects.vert'),
 	maek.GLSLC('objects.frag'),
 ];
-main_objs.push( maek.CPP('Tutorial-ObjectsPipeline.cpp', undefined, { depends:[...objects_shaders] } ) );
+main_objs.push( maek.CPP('A1-ObjectsPipeline.cpp', undefined, { depends:[...objects_shaders] } ) );
 
 
 
@@ -83,7 +88,10 @@ function custom_flags_and_rules() {
 		maek.options.CPPFlags = [
 			'-O2',
 			`-I${VULKAN_SDK}/include`,
-			`-I${GLFW_DIR}/include`
+			`-I${GLFW_DIR}/include`,
+			'-I../Lib',           
+			'-I../Lib/stb',
+			'-I../Lib/glm',
 		];
 
 		maek.options.LINKLibs = [
@@ -110,6 +118,9 @@ function custom_flags_and_rules() {
 			'/wd4146', //-1U is unsigned
 			`/I${VULKAN_SDK}/Include`,
 			`/I../glfw-3.4.bin.WIN64/include`,
+			`/I../Lib`,   //sejp
+			`/I../Lib/stb`,
+			`/I../Lib/glm`,
 		];
 
 		maek.options.LINKLibs = [
@@ -136,6 +147,9 @@ function custom_flags_and_rules() {
 			`-I${VULKAN_SDK}/include`,
 			`-I/opt/homebrew/include`, //for brew-installed GLFW
 			`-I../glfw-3.4.bin.MACOS/include`, //for release from github
+			`/I../Lib`, 
+			`/I../Lib/stb`,
+			`/I../Lib/glm`,
 		];
 
 		maek.options.LINKLibs = [
