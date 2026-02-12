@@ -30,9 +30,12 @@ const main_objs = [
 	maek.CPP('Render.cpp'),
 	maek.CPP('PosColVertex.cpp'),
 	maek.CPP('PosNorTexVertex.cpp'),
+	maek.CPP('PosNorTanTexVertex.cpp'),
 	maek.CPP('RTG.cpp'),
 	maek.CPP('Helpers.cpp'),
 	maek.CPP('main.cpp'),
+	//maek.CPP('scene.cpp'),
+	maek.CPP('../Lib/sejp.cpp'),
 ];
 
 //maek.GLSLC(...) builds a glsl source file:
@@ -83,7 +86,10 @@ function custom_flags_and_rules() {
 		maek.options.CPPFlags = [
 			'-O2',
 			`-I${VULKAN_SDK}/include`,
-			`-I${GLFW_DIR}/include`
+			`-I${GLFW_DIR}/include`,
+			'-I../Lib',
+			'-I../Lib/stb',
+			'-I../Lib/glm',
 		];
 
 		maek.options.LINKLibs = [
@@ -110,6 +116,9 @@ function custom_flags_and_rules() {
 			'/wd4146', //-1U is unsigned
 			`/I${VULKAN_SDK}/Include`,
 			`/I../glfw-3.4.bin.WIN64/include`,
+			'-I../Lib',
+			'-I../Lib/stb',
+			'-I../Lib/glm',
 		];
 
 		maek.options.LINKLibs = [
@@ -136,6 +145,9 @@ function custom_flags_and_rules() {
 			`-I${VULKAN_SDK}/include`,
 			`-I/opt/homebrew/include`, //for brew-installed GLFW
 			`-I../glfw-3.4.bin.MACOS/include`, //for release from github
+			'-I../Lib',
+			'-I../Lib/stb',
+			'-I../Lib/glm',
 		];
 
 		maek.options.LINKLibs = [
