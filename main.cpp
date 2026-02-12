@@ -1,7 +1,7 @@
 
 #include "RTG.hpp"
 
-#include "Tutorial.hpp"
+#include "Render.hpp"
 
 #include <iostream>
 
@@ -13,7 +13,7 @@ int main(int argc, char **argv) {
 		RTG::Configuration configuration;
 
 		configuration.application_info = VkApplicationInfo{
-			.pApplicationName = "nakluV Tutorial",
+			.pApplicationName = "A1 Render",
 			.applicationVersion = VK_MAKE_VERSION(0,0,0),
 			.pEngineName = "Unknown",
 			.engineVersion = VK_MAKE_VERSION(0,0,0),
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 		RTG rtg(configuration);
 
 		//initializes global (whole-life-of-application) resources:
-		Tutorial application(rtg);
+		Render application(rtg);
 
 		//main loop -- handles events, renders frames, etc:
 		rtg.run(application);

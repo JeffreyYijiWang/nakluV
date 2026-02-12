@@ -1,4 +1,4 @@
-#include "Tutorial.hpp"
+#include "Render.hpp"
 
 #include "Helpers.hpp"
 #include "VK.hpp"
@@ -11,7 +11,7 @@ static uint32_t frag_code[] =
 #include "spv/objects.frag.inl"
 ;
 
-void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
+void Render::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
 	VkShaderModule vert_module = rtg.helpers.create_shader_module(vert_code);
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
@@ -80,12 +80,18 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 			set2_TEXTURE,
 		};
 
+		VkPushConstantRange range{
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.offset = 0,
+			.size = sizeof(Push),
+		};
+
 		VkPipelineLayoutCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = uint32_t(layouts.size()),
 			.pSetLayouts = layouts.data(),
-			.pushConstantRangeCount = 0,
-			.pPushConstantRanges = nullptr,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &range,
 		};
 
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
@@ -208,7 +214,7 @@ void Tutorial::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint3
 	vkDestroyShaderModule(rtg.device, vert_module, nullptr);
 }
 
-void Tutorial::ObjectsPipeline::destroy(RTG& rtg) {
+void Render::ObjectsPipeline::destroy(RTG& rtg) {
 
 	if (set2_TEXTURE != VK_NULL_HANDLE) {
 		vkDestroyDescriptorSetLayout(rtg.device, set2_TEXTURE, nullptr);
