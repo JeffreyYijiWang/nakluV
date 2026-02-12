@@ -7,7 +7,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../lib/stb/stb_image.h"
 
-
 #include <GLFW/glfw3.h>
 
 #include <array>
@@ -17,82 +16,83 @@
 #include <iostream>
 #include <algorithm>
 #include <fstream>
-#include<deque>
+#include <deque>
 
-Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
-	//select a depth format:
-	//at least on of these two must be supported, arrourding to the spec; but neihet are required
+Tutorial::Tutorial(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
+{
+	// select a depth format:
+	// at least on of these two must be supported, arrourding to the spec; but neihet are required
 
 	depth_format = rtg.helpers.find_image_format(
-		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_X8_D24_UNORM_PACK32 },
+		{VK_FORMAT_D32_SFLOAT, VK_FORMAT_X8_D24_UNORM_PACK32},
 		VK_IMAGE_TILING_OPTIMAL,
-		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-	);
+		VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	//create rendering pass
+	// create rendering pass
 	{
-		//Attachemetns
-	std::array< VkAttachmentDescription, 2 > attachments{
-		VkAttachmentDescription{ //0 - color attachment:
-			.format = rtg.surface_format.format,
-			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.finalLayout = rtg.present_layout,
-		},
-		VkAttachmentDescription{ //1 - depth attachment:
-			.format = depth_format,
-			.samples = VK_SAMPLE_COUNT_1_BIT,
-			.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-			.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-			.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-			.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-		},
-	};
-		//subpasses
-	VkAttachmentReference color_attachment_ref{
-	.attachment = 0,
-	.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-	};
+		// Attachemetns
+		std::array<VkAttachmentDescription, 2> attachments{
+			VkAttachmentDescription{
+				// 0 - color attachment:
+				.format = rtg.surface_format.format,
+				.samples = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout = rtg.present_layout,
+			},
+			VkAttachmentDescription{
+				// 1 - depth attachment:
+				.format = depth_format,
+				.samples = VK_SAMPLE_COUNT_1_BIT,
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			},
+		};
+		// subpasses
+		VkAttachmentReference color_attachment_ref{
+			.attachment = 0,
+			.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		};
 
-	VkAttachmentReference depth_attachment_ref{
-		.attachment = 1,
-		.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-	};
+		VkAttachmentReference depth_attachment_ref{
+			.attachment = 1,
+			.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+		};
 
-	VkSubpassDescription subpass{
-		.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-		.inputAttachmentCount = 0,
-		.pInputAttachments = nullptr,
-		.colorAttachmentCount = 1,
-		.pColorAttachments = &color_attachment_ref,
-		.pDepthStencilAttachment = &depth_attachment_ref,
-	};
-		//dependencies
-			// thi sdefer the image load actions for attachments
-	std::array< VkSubpassDependency, 2 > dependencies{
-	VkSubpassDependency{
-		.srcSubpass = VK_SUBPASS_EXTERNAL,
-		.dstSubpass = 0,
-		.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		.srcAccessMask = 0,
-		.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-	},
-	VkSubpassDependency{
-		.srcSubpass = VK_SUBPASS_EXTERNAL,
-		.dstSubpass = 0,
-		.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
-		.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-		.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-		.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-	}
-	};
+		VkSubpassDescription subpass{
+			.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+			.inputAttachmentCount = 0,
+			.pInputAttachments = nullptr,
+			.colorAttachmentCount = 1,
+			.pColorAttachments = &color_attachment_ref,
+			.pDepthStencilAttachment = &depth_attachment_ref,
+		};
+		// dependencies
+		//  thi sdefer the image load actions for attachments
+		std::array<VkSubpassDependency, 2> dependencies{
+			VkSubpassDependency{
+				.srcSubpass = VK_SUBPASS_EXTERNAL,
+				.dstSubpass = 0,
+				.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.srcAccessMask = 0,
+				.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			},
+			VkSubpassDependency{
+				.srcSubpass = VK_SUBPASS_EXTERNAL,
+				.dstSubpass = 0,
+				.srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+				.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+				.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+				.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+			}};
 
 		VkRenderPassCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -106,7 +106,7 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 		VK(vkCreateRenderPass(rtg.device, &create_info, nullptr, &render_pass));
 	}
-	{ //create command pool
+	{ // create command pool
 		VkCommandPoolCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
 			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -119,25 +119,26 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 	lines_pipeline.create(rtg, render_pass, 0);
 	objects_pipeline.create(rtg, render_pass, 0);
 
-	{//create descriptor pool:
-		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); //for easier to read counting
+	{															  // create descriptor pool:
+		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); // for easier to read counting
 
-		std::array < VkDescriptorPoolSize, 2> pool_sizes{
+		std::array<VkDescriptorPoolSize, 2> pool_sizes{
 
-			VkDescriptorPoolSize{ //union buffer descirpts
+			VkDescriptorPoolSize{
+				// union buffer descirpts
 				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-				.descriptorCount = 2 * per_workspace, //one descriptor per set, one set per workspace
+				.descriptorCount = 2 * per_workspace, // one descriptor per set, one set per workspace
 			},
 			VkDescriptorPoolSize{
 				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-				.descriptorCount = 1 * per_workspace, //one descriptoper set, one set per workspace
+				.descriptorCount = 1 * per_workspace, // one descriptoper set, one set per workspace
 			},
 		};
-		
+
 		VkDescriptorPoolCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-			.flags = 0, // because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
-			.maxSets = 3 * per_workspace, //two set per workspace
+			.flags = 0,					  // because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
+			.maxSets = 3 * per_workspace, // two set per workspace
 			.poolSizeCount = uint32_t(pool_sizes.size()),
 			.pPoolSizes = pool_sizes.data(),
 		};
@@ -146,8 +147,9 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 	}
 
 	workspaces.resize(rtg.workspaces.size());
-	for (Workspace &workspace : workspaces) {
-		{ //allocate command buffer:
+	for (Workspace &workspace : workspaces)
+	{
+		{ // allocate command buffer:
 			VkCommandBufferAllocateInfo alloc_info{
 				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
 				.commandPool = command_pool,
@@ -159,19 +161,19 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 		workspace.Camera_src = rtg.helpers.create_buffer(
 			sizeof(LinesPipeline::Camera),
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, // goign to have the gpu copy this from memory - transfer_bit
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,											// goign to have the gpu copy this from memory - transfer_bit
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, // host visible memory, coherenet (no special sync needed)
-			Helpers::Mapped // get a pointer to teh memory
+			Helpers::Mapped																// get a pointer to teh memory
 
 		);
 		workspace.Camera = rtg.helpers.create_buffer(
 			sizeof(LinesPipeline::Camera),
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, //going to use a uniform buffer, also ging to have GPU copy into this memory
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, // GPU local memory 
-			Helpers::Unmapped //don;t get a pinter to memoery
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, // going to use a uniform buffer, also ging to have GPU copy into this memory
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,								   // GPU local memory
+			Helpers::Unmapped													   // don;t get a pinter to memoery
 		);
 
-		{// allocated descriptor set for Cmaer descirpt 
+		{ // allocated descriptor set for Cmaer descirpt
 			VkDescriptorSetAllocateInfo alloc_info{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 				.descriptorPool = descriptor_pool,
@@ -181,23 +183,23 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.Camera_descriptors));
 		}
-		//allcat for world
+		// allcat for world
 
-		workspace.World_src =rtg.helpers.create_buffer(
+		workspace.World_src = rtg.helpers.create_buffer(
 			sizeof(ObjectsPipeline::World),
-			VK_BUFFER_USAGE_TRANSFER_SRC_BIT, // goign to have the gpu copy this from memory - transfer_bit
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,											// goign to have the gpu copy this from memory - transfer_bit
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, // host visible memory, coherenet (no special sync needed)
-			Helpers::Mapped // get a pointer to teh memory
+			Helpers::Mapped																// get a pointer to teh memory
 
 		);
 		workspace.World = rtg.helpers.create_buffer(
 			sizeof(ObjectsPipeline::World),
-			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, //going to use a uniform buffer, also ging to have GPU copy into this memory
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, // GPU local memory 
-			Helpers::Unmapped //don;t get a pinter to memoery
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, // going to use a uniform buffer, also ging to have GPU copy into this memory
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,								   // GPU local memory
+			Helpers::Unmapped													   // don;t get a pinter to memoery
 		);
 
-		{// allocated descriptor set for World descriptor s
+		{ // allocated descriptor set for World descriptor s
 			VkDescriptorSetAllocateInfo alloc_info{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 				.descriptorPool = descriptor_pool,
@@ -207,10 +209,10 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.World_descriptors));
 
-			//not weill actula fill in this descirpt set beflow 
+			// not weill actula fill in this descirpt set beflow
 		}
 
-		{// allocate descriptor 
+		{ // allocate descriptor
 			VkDescriptorSetAllocateInfo alloc_info{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 				.descriptorPool = descriptor_pool,
@@ -220,11 +222,11 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.Transforms_descriptors));
 
-			//not we iwll fin this descirpt set in tehredn when buefer or re-allocated;
+			// not we iwll fin this descirpt set in tehredn when buefer or re-allocated;
 		}
-		
-		//todo: descruotir write
-		{// point descript to Camera buffer:
+
+		// todo: descruotir write
+		{ // point descript to Camera buffer:
 			VkDescriptorBufferInfo Camera_info{
 				.buffer = workspace.Camera.handle,
 				.offset = 0,
@@ -237,7 +239,7 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				.range = workspace.World.size,
 			};
 
-			std::array < VkWriteDescriptorSet, 2> writes{
+			std::array<VkWriteDescriptorSet, 2> writes{
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = workspace.Camera_descriptors,
@@ -259,29 +261,32 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			};
 
 			vkUpdateDescriptorSets(
-				rtg.device, //device 
-				uint32_t(writes.size()),// descriptor write count
-				writes.data(), //pDescriptorWrites
-				0, //descriptroyCopyCount
-				nullptr  //pDescriptorCopies
+				rtg.device,				 // device
+				uint32_t(writes.size()), // descriptor write count
+				writes.data(),			 // pDescriptorWrites
+				0,						 // descriptroyCopyCount
+				nullptr					 // pDescriptorCopies
 			);
 		}
 	}
-	{//create object vertices
+	{ // create object vertices
 		std::vector<PosNorTanTexVertex> vertices;
 
 		vertices.resize(scene.vertices_count);
 		uint32_t new_vertices_start = 0;
-		mesh_vertices.clear();
-		mesh_vertices.reserve(scene.meshes.size());
+		mesh_vertices.assign(scene.meshes.size(), ObjectVertices());
+		mesh_AABBs.assign(scene.meshes.size(), AABB());
 
-		for (uint32_t i = 0; i < uint32_t(scene.meshes.size()); ++i) {
-			Scene::Mesh& cur_mesh = scene.meshes[i];
+		for (uint32_t i = 0; i < uint32_t(scene.meshes.size()); ++i)
+		{
+			Scene::Mesh &cur_mesh = scene.meshes[i];
 			mesh_vertices[i].count = cur_mesh.count;
 			mesh_vertices[i].first = new_vertices_start;
 			std::ifstream file(scene.scene_path + "/" + cur_mesh.attributes[0].source, std::ios::binary); // assuming the attribute layout holds
-			if (!file.is_open()) throw std::runtime_error("Error opening file for mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
-			if (!file.read(reinterpret_cast<char*>(&vertices[new_vertices_start]), cur_mesh.count * sizeof(PosNorTanTexVertex))) {
+			if (!file.is_open())
+				throw std::runtime_error("Error opening file for mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
+			if (!file.read(reinterpret_cast<char *>(&vertices[new_vertices_start]), cur_mesh.count * sizeof(PosNorTanTexVertex)))
+			{
 				throw std::runtime_error("Failed to read mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
 			}
 			new_vertices_start += cur_mesh.count;
@@ -294,93 +299,90 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			bytes,
 			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			Helpers::Unmapped
-		);
+			Helpers::Unmapped);
 
-
-
-		//copy data to buffer
+		// copy data to buffer
 
 		rtg.helpers.transfer_to_buffer(vertices.data(), bytes, object_vertices);
 	}
 
-	
-{/// make some texture
-	textures.reserve(scene.textures.size() + 1); // index 0 is the default texture
-	{//default material
-		uint8_t data[4] = { 255,255,255,255 };
-		//make a place for the texture to live on the GPU:
-		textures.emplace_back(rtg.helpers.create_image(
-			VkExtent2D{ .width = 1 , .height = 1 }, //size of image
-			VK_FORMAT_R8G8B8A8_UNORM, //how to interpret image data (in this case, SRGB-encoded 8-bit RGBA)
-			VK_IMAGE_TILING_OPTIMAL,
-			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sample and upload
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //should be device-local
-			Helpers::Unmapped
-		));
-
-		//transfer data:
-		rtg.helpers.transfer_to_image(&data, sizeof(uint8_t) * 4, textures.back());
-	}
-	for (uint32_t i = 0; i < scene.textures.size(); ++i) {
-		Scene::Texture& cur_texture = scene.textures[i];
-		if (cur_texture.has_src) {
-			int width, height, n;
-			unsigned char *image = stbi_load((scene.scene_path +"/"+ cur_texture.source).c_str(), &width, &height, &n, 4);
-			if (image == NULL) throw std::runtime_error("Error loading texture " + scene.scene_path + cur_texture.source);
-			assert(n == 3); // should only be 3 channel per .s72 spec
-			//make a place for the texture to live on the GPU:
+	{ /// make some texture
+		stbi_set_flip_vertically_on_load(true);
+		textures.reserve(scene.textures.size() + 1); // index 0 is the default texture
+		{											 // default material
+			uint8_t data[4] = {255, 255, 255, 255};
+			// make a place for the texture to live on the GPU:
 			textures.emplace_back(rtg.helpers.create_image(
-				VkExtent2D{ .width = uint32_t(width) , .height = uint32_t(height) }, //size of image
-				VK_FORMAT_R8G8B8A8_UNORM, //how to interpret image data (in this case, linearly-encoded 8-bit RGBA) TODO: double check format
+				VkExtent2D{.width = 1, .height = 1}, // size of image
+				VK_FORMAT_R8G8B8A8_UNORM,			 // how to interpret image data (in this case, SRGB-encoded 8-bit RGBA)
 				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sample and upload
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //should be device-local
-				Helpers::Unmapped
-			));
-			//transfer data:
-			std::cout << width << ", " << height << ", " << n << std::endl;
-			rtg.helpers.transfer_to_image(image, sizeof(image[0])* width* height * 4, textures.back());
-			//free image:
-			stbi_image_free(image);
-		}
-		else {
-			uint8_t data[4] = { uint8_t(cur_texture.value.x * 255.0f), uint8_t(cur_texture.value.y * 255.0f), uint8_t(cur_texture.value.z * 255.0f),255 };
-			//make a place for the texture to live on the GPU:
-			textures.emplace_back(rtg.helpers.create_image(
-				VkExtent2D{ .width = 1 , .height = 1 }, //size of image
-				VK_FORMAT_R8G8B8A8_UNORM, //how to interpret image data (in this case, SRGB-encoded 8-bit RGBA)
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sample and upload
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //should be device-local
-				Helpers::Unmapped
-			));
+				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
+				Helpers::Unmapped));
 
-			//transfer data:
+			// transfer data:
 			rtg.helpers.transfer_to_image(&data, sizeof(uint8_t) * 4, textures.back());
+		}
+		for (uint32_t i = 0; i < scene.textures.size(); ++i)
+		{
+			Scene::Texture &cur_texture = scene.textures[i];
+			if (cur_texture.has_src)
+			{
+				int width, height, n;
+				unsigned char *image = stbi_load((scene.scene_path + "/" + cur_texture.source).c_str(), &width, &height, &n, 4);
+				if (image == NULL)
+					throw std::runtime_error("Error loading texture " + scene.scene_path + cur_texture.source);
+				assert(n == 3); // should only be 3 channel per .s72 spec
+				// make a place for the texture to live on the GPU:
+				textures.emplace_back(rtg.helpers.create_image(
+					VkExtent2D{.width = uint32_t(width), .height = uint32_t(height)}, // size of image
+					VK_FORMAT_R8G8B8A8_UNORM,										  // how to interpret image data (in this case, linearly-encoded 8-bit RGBA) TODO: double check format
+					VK_IMAGE_TILING_OPTIMAL,
+					VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
+					Helpers::Unmapped));
+				// transfer data:
+				std::cout << width << ", " << height << ", " << n << std::endl;
+				rtg.helpers.transfer_to_image(image, sizeof(image[0]) * width * height * 4, textures.back());
+				// free image:
+				stbi_image_free(image);
+			}
+			else
+			{
+				uint8_t data[4] = {uint8_t(cur_texture.value.x * 255.0f), uint8_t(cur_texture.value.y * 255.0f), uint8_t(cur_texture.value.z * 255.0f), 255};
+				// make a place for the texture to live on the GPU:
+				textures.emplace_back(rtg.helpers.create_image(
+					VkExtent2D{.width = 1, .height = 1}, // size of image
+					VK_FORMAT_R8G8B8A8_UNORM,			 // how to interpret image data (in this case, SRGB-encoded 8-bit RGBA)
+					VK_IMAGE_TILING_OPTIMAL,
+					VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
+					Helpers::Unmapped));
 
+				// transfer data:
+				rtg.helpers.transfer_to_image(&data, sizeof(uint8_t) * 4, textures.back());
+			}
 		}
 	}
-}
 
-	{ //make image views for the texture
+	{ // make image views for the texture
 		texture_views.reserve(textures.size());
-		for (Helpers::AllocatedImage const& image : textures) {
+		for (Helpers::AllocatedImage const &image : textures)
+		{
 			VkImageViewCreateInfo create_info{
 				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
 				.flags = 0,
 				.image = image.handle,
 				.viewType = VK_IMAGE_VIEW_TYPE_2D,
 				.format = image.format,
-				// .componet set swizling and is fine when zero-initialied 
+				// .componet set swizling and is fine when zero-initialied
 				.subresourceRange{
 					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 					.baseMipLevel = 0,
 					.levelCount = 1,
 					.baseArrayLayer = 0,
 					.layerCount = 1,
-				}
-			};
+				}};
 
 			VkImageView image_view = VK_NULL_HANDLE;
 			VK(vkCreateImageView(rtg.device, &create_info, nullptr, &image_view));
@@ -390,7 +392,7 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 		assert(texture_views.size() == textures.size());
 	}
 
-	{//make sampler for the textures
+	{ // make sampler for the textures
 		VkSamplerCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
 			.flags = 0,
@@ -402,11 +404,11 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
 			.mipLodBias = 0.0f,
 			.anisotropyEnable = VK_FALSE,
-			.maxAnisotropy = 0.0f, //doesn't matter if anisotropy ins't enabled
+			.maxAnisotropy = 0.0f, // doesn't matter if anisotropy ins't enabled
 			.compareEnable = VK_FALSE,
-			.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled 
+			.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled
 			.minLod = 0.0f,
-			.maxLod = 0.0f ,
+			.maxLod = 0.0f,
 			.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
 			.unnormalizedCoordinates = VK_FALSE,
 		};
@@ -414,31 +416,32 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 		VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
 	}
 
-	{//create the texture descirptor pool
-		
-			uint32_t per_texture = uint32_t(textures.size()); //for easier to read counting
+	{ // create the texture descirptor pool
 
-			std::array < VkDescriptorPoolSize, 1> pool_sizes{
+		uint32_t per_texture = uint32_t(textures.size()); // for easier to read counting
 
-				VkDescriptorPoolSize{ //union buffer descirpts
-					.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.descriptorCount = 1 * 1 * per_texture, //one descriptor per set, one set per trexure
-				},
-			};
+		std::array<VkDescriptorPoolSize, 1> pool_sizes{
 
-			VkDescriptorPoolCreateInfo create_info{
-				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-				.flags = 0, // because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
-				.maxSets = 1 * per_texture, //two set per texsture
-				.poolSizeCount = uint32_t(pool_sizes.size()),
-				.pPoolSizes = pool_sizes.data(),
-			};
+			VkDescriptorPoolSize{
+				// union buffer descirpts
+				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1 * 1 * per_texture, // one descriptor per set, one set per trexure
+			},
+		};
 
-			VK(vkCreateDescriptorPool(rtg.device, &create_info, nullptr, &texture_descriptor_pool));
+		VkDescriptorPoolCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.flags = 0,					// because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
+			.maxSets = 1 * per_texture, // two set per texsture
+			.poolSizeCount = uint32_t(pool_sizes.size()),
+			.pPoolSizes = pool_sizes.data(),
+		};
+
+		VK(vkCreateDescriptorPool(rtg.device, &create_info, nullptr, &texture_descriptor_pool));
 	}
 
-	{//allocate and write the texture descriptor sets
-		//Allocate and write the texture descriptor sets
+	{ // allocate and write the texture descriptor sets
+		// Allocate and write the texture descriptor sets
 		VkDescriptorSetAllocateInfo alloc_info{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 			.descriptorPool = texture_descriptor_pool,
@@ -447,15 +450,17 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 		};
 		texture_descriptors.assign(textures.size(), VK_NULL_HANDLE);
 
-		for (VkDescriptorSet& descriptor_set : texture_descriptors) {
+		for (VkDescriptorSet &descriptor_set : texture_descriptors)
+		{
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &descriptor_set));
 		}
 
-		//write descptor for textures 
-		std::vector < VkDescriptorImageInfo > infos(textures.size());
-		std::vector < VkWriteDescriptorSet > writes(textures.size());
+		// write descptor for textures
+		std::vector<VkDescriptorImageInfo> infos(textures.size());
+		std::vector<VkWriteDescriptorSet> writes(textures.size());
 
-		for (Helpers::AllocatedImage const& image : textures) {
+		for (Helpers::AllocatedImage const &image : textures)
+		{
 			size_t i = &image - &textures[0];
 
 			infos[i] = VkDescriptorImageInfo{
@@ -477,52 +482,133 @@ Tutorial::Tutorial(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 		vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
 	}
-	//{ //setup camera
-	//	float x = user_camera.radius * std::sin(user_camera.elevation) * std::cos(user_camera.azimuth);
-	//	float y = user_camera.radius * std::sin(user_camera.elevation) * std::sin(user_camera.azimuth);
-	//	float z = user_camera.radius * std::cos(user_camera.elevation);
-	//	CLIP_FROM_WORLD = glm::make_mat4((perspective(
-	//		60.0f * float(M_PI) / 180.0f, //vfov
-	//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), //aspect
-	//		0.1f, //near
-	//		1000.0f //far
-	//	) * look_at(
-	//		x, y, z, //eye
-	//		0.0f, 0.0f, 0.5f, //target
-	//		0.0f, 0.0f, 1.0f //up
-	//	)).data());
-	//}
+	{ // setup camera if no --camera in the command line, scene camera is set in update
+		if (!rtg_.configuration.scene_camera.has_value())
+		{
+			float x = user_camera.radius * std::sin(user_camera.elevation) * std::cos(user_camera.azimuth);
+			float y = user_camera.radius * std::sin(user_camera.elevation) * std::sin(user_camera.azimuth);
+			float z = user_camera.radius * std::cos(user_camera.elevation);
+			// cache culling view
+			//cache view and clip matrices
+			view_from_world[1] = glm::make_mat4(look_at(
+												  x, y, z,			// eye
+												  0.0f, 0.0f, 0.5f, // target
+												  0.0f, 0.0f, 1.0f	// up
+												  )
+												  .data());
+			clip_from_view[1] = glm::make_mat4(perspective(
+												 60.0f * float(M_PI) / 180.0f,									  // vfov
+												 rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+												 0.1f,															  // near
+												 1000.0f														  // far
+												 )
+												 .data());
 
+			view_from_world[2] = view_from_world[1];
+			clip_from_view[2] = clip_from_view[1];
+			CLIP_FROM_WORLD = clip_from_view[1] * view_from_world[1];
+
+			view_camera = InSceneCamera::UserCamera;
+			culling_camera = InSceneCamera::UserCamera;
+		}
+		else
+		{
+			Scene::Camera &cur_camera = scene.cameras[scene.requested_camera_index];
+			glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.parent_from_local();
+			for (int i = 1; i < cur_camera.local_to_world.size(); ++i)
+			{
+				cur_camera_transform *= scene.nodes[cur_camera.local_to_world[i]].transform.parent_from_local();
+			}
+			glm::vec3 eye = glm::vec3(cur_camera_transform[3]);
+			glm::vec3 forward = -glm::vec3(cur_camera_transform[2]);
+			glm::vec3 target = eye + forward;
+
+			view_from_world[0] = glm::make_mat4(look_at(
+												  eye.x, eye.y, eye.z,			// eye
+												  target.x, target.y, target.z, // target
+												  0.0f, 0.0f, 1.0f				// up
+												  )
+												  .data());
+			clip_from_view[0] = glm::make_mat4((perspective(
+												  cur_camera.vfov,	 // vfov
+												  cur_camera.aspect, // aspect
+												  cur_camera.near,	 // near
+												  cur_camera.far	 // far
+												  ) *
+											  look_at(
+												  eye.x, eye.y, eye.z,			// eye
+												  target.x, target.y, target.z, // target
+												  0.0f, 0.0f, 1.0f				// up
+												  ))
+												 .data());
+
+			scene_cam_frustum = make_frustum(
+				cur_camera.vfov,   // vfov
+				cur_camera.aspect, // aspect
+				cur_camera.near,   // near
+				cur_camera.far	   // far
+			);
+
+			clip_from_view[1] = glm::make_mat4(perspective(
+				60.0f * float(M_PI) / 180.0f, //vfov
+				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), //aspect
+				0.1f, //near
+				1000.0f //far
+			).data());
+
+			clip_from_view[2] = clip_from_view[1];
+
+			CLIP_FROM_WORLD = clip_from_view[0] * view_from_world[0];
+
+			view_camera = InSceneCamera::SceneCamera;
+		}
+
+		user_camera.type = UserCamera;
+		debug_camera.type = DebugCamera;
+
+		user_cam_frustum = make_frustum(
+			60.0f * float(M_PI) / 180.0f,									 // vfov
+			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+			0.1f,															 // near
+			1000.0f															 // far
+		);
+	}
 }
 
-Tutorial::~Tutorial() {
-	//just in case rendering is still in flight, don't destroy resources:
+Tutorial::~Tutorial()
+{
+	// just in case rendering is still in flight, don't destroy resources:
 	//(not using VK macro to avoid throw-ing in destructor)
-	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS) {
+	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS)
+	{
 		std::cerr << "Failed to vkDeviceWaitIdle in Tutorial::~Tutorial [" << string_VkResult(result) << "]; continuing anyway." << std::endl;
 	}
 
-	if (texture_descriptor_pool) {
+	if (texture_descriptor_pool)
+	{
 		vkDestroyDescriptorPool(rtg.device, texture_descriptor_pool, nullptr);
 		texture_descriptor_pool = nullptr;
 
-		//this also frees the descriptor sets allocated form the pool: 
+		// this also frees the descriptor sets allocated form the pool:
 		texture_descriptors.clear();
 	}
 
-	if (texture_sampler) {
+	if (texture_sampler)
+	{
 		vkDestroySampler(rtg.device, texture_sampler, nullptr);
 		texture_sampler = VK_NULL_HANDLE;
 	}
 
-	for (VkImageView& view : texture_views) {
+	for (VkImageView &view : texture_views)
+	{
 		vkDestroyImageView(rtg.device, view, nullptr);
 		view = VK_NULL_HANDLE;
 	}
 
 	texture_views.clear();
 
-	for (auto& texture : textures) {
+	for (auto &texture : textures)
+	{
 		rtg.helpers.destroy_image(std::move(texture));
 	}
 
@@ -530,84 +616,98 @@ Tutorial::~Tutorial() {
 
 	rtg.helpers.destroy_buffer(std::move(object_vertices));
 
-	if (swapchain_depth_image.handle != VK_NULL_HANDLE) {
+	if (swapchain_depth_image.handle != VK_NULL_HANDLE)
+	{
 		destroy_framebuffers();
 	}
 
-	for (Workspace &workspace : workspaces) {
-		if (workspace.command_buffer != VK_NULL_HANDLE) {
+	for (Workspace &workspace : workspaces)
+	{
+		if (workspace.command_buffer != VK_NULL_HANDLE)
+		{
 			vkFreeCommandBuffers(rtg.device, command_pool, 1, &workspace.command_buffer);
 			workspace.command_buffer = VK_NULL_HANDLE;
 		}
 
-		if (workspace.lines_vertices_src.handle != VK_NULL_HANDLE) {
+		if (workspace.lines_vertices_src.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices_src));
 		}
-		if (workspace.lines_vertices.handle != VK_NULL_HANDLE) {
+		if (workspace.lines_vertices.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices));
 		}
-		if (workspace.Camera_src.handle != VK_NULL_HANDLE) {
+		if (workspace.Camera_src.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.Camera_src));
 		}
-		if (workspace.Camera.handle != VK_NULL_HANDLE) {
+		if (workspace.Camera.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.Camera));
 		}
-		if (workspace.World_src.handle != VK_NULL_HANDLE) {
+		if (workspace.World_src.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.World_src));
 		}
-		if (workspace.World.handle != VK_NULL_HANDLE) {
+		if (workspace.World.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.World));
 		}
 
-		if (workspace.Transforms_src.handle != VK_NULL_HANDLE) {
+		if (workspace.Transforms_src.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.Transforms_src));
 		}
-		if (workspace.Transforms.handle != VK_NULL_HANDLE) {
+		if (workspace.Transforms.handle != VK_NULL_HANDLE)
+		{
 			rtg.helpers.destroy_buffer(std::move(workspace.Transforms));
 		}
-		//tramsforms_descriptro sfreed when pool is destoryed
+		// tramsforms_descriptro sfreed when pool is destoryed
 	}
-
 
 	workspaces.clear();
 
-	if (descriptor_pool) {
+	if (descriptor_pool)
+	{
 		vkDestroyDescriptorPool(rtg.device, descriptor_pool, nullptr);
 		descriptor_pool = nullptr;
-		//this also free the descriptor sets allocated from the pool
+		// this also free the descriptor sets allocated from the pool
 	}
 	background_pipeline.destroy(rtg);
 	lines_pipeline.destroy(rtg);
 	objects_pipeline.destroy(rtg);
 
 	// DESTORY COMMAND POOL
-	if (command_pool != VK_NULL_HANDLE) {
+	if (command_pool != VK_NULL_HANDLE)
+	{
 		vkDestroyCommandPool(rtg.device, command_pool, nullptr);
 		command_pool = VK_NULL_HANDLE;
 	}
 
-	if (render_pass != VK_NULL_HANDLE) {
+	if (render_pass != VK_NULL_HANDLE)
+	{
 		vkDestroyRenderPass(rtg.device, render_pass, nullptr);
 		render_pass = VK_NULL_HANDLE;
 	}
 }
 
-void Tutorial::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain) {
+void Tutorial::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain)
+{
 	//[re]create framebuffers:
 	// clearn up existing framebuffers
-	if (swapchain_depth_image.handle != VK_NULL_HANDLE) {
+	if (swapchain_depth_image.handle != VK_NULL_HANDLE)
+	{
 		destroy_framebuffers();
 	}
-	//allocate depth images for framge buffer to share
+	// allocate depth images for framge buffer to share
 	swapchain_depth_image = rtg.helpers.create_image(
 		swapchain.extent,
 		depth_format,
 		VK_IMAGE_TILING_OPTIMAL,
 		VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		Helpers::Unmapped
-	);
-	//create an imaga view of the depht image
+		Helpers::Unmapped);
+	// create an imaga view of the depht image
 	{
 		VkImageViewCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -619,16 +719,16 @@ void Tutorial::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain) {
 				.baseMipLevel = 0,
 				.levelCount = 1,
 				.baseArrayLayer = 0,
-				.layerCount = 1
-			},
+				.layerCount = 1},
 		};
 
 		VK(vkCreateImageView(rtg.device, &create_info, nullptr, &swapchain_depth_image_view));
 	}
-	//create frambuffers poihnt to each swapchain image view and the share depth image view 
+	// create frambuffers poihnt to each swapchain image view and the share depth image view
 	swapchain_framebuffers.assign(swapchain.image_views.size(), VK_NULL_HANDLE);
-	for (size_t i = 0; i < swapchain.image_views.size(); ++i) {
-		std::array< VkImageView, 2 > attachments{
+	for (size_t i = 0; i < swapchain.image_views.size(); ++i)
+	{
+		std::array<VkImageView, 2> attachments{
 			swapchain.image_views[i],
 			swapchain_depth_image_view,
 		};
@@ -646,8 +746,10 @@ void Tutorial::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain) {
 	}
 }
 
-void Tutorial::destroy_framebuffers() {
-	for (VkFramebuffer& framebuffer : swapchain_framebuffers) {
+void Tutorial::destroy_framebuffers()
+{
+	for (VkFramebuffer &framebuffer : swapchain_framebuffers)
+	{
 		assert(framebuffer != VK_NULL_HANDLE);
 		vkDestroyFramebuffer(rtg.device, framebuffer, nullptr);
 		framebuffer = VK_NULL_HANDLE;
@@ -659,77 +761,80 @@ void Tutorial::destroy_framebuffers() {
 	swapchain_depth_image_view = VK_NULL_HANDLE;
 
 	rtg.helpers.destroy_image(std::move(swapchain_depth_image));
-
 }
 
-
-void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
-	//assert that parameters are valid:
+void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params)
+{
+	// assert that parameters are valid:
 	assert(&rtg == &rtg_);
 	assert(render_params.workspace_index < workspaces.size());
 	assert(render_params.image_index < swapchain_framebuffers.size());
 
-	//prevent faulty attempt to render when the swapchain has no area
-	if (rtg.swapchain_extent.width == 0 || rtg.swapchain_extent.height == 0) return;
+	// prevent faulty attempt to render when the swapchain has no area
+	// if (rtg.swapchain_extent.width == 0 || rtg.swapchain_extent.height == 0)
+	// 	return;
 
-	//get more convenient names for the current workspace and target framebuffer:
+	// get more convenient names for the current workspace and target framebuffer:
 	Workspace &workspace = workspaces[render_params.workspace_index];
 	VkFramebuffer framebuffer = swapchain_framebuffers[render_params.image_index];
 
-	//record (into `workspace.command_buffer`) commands that run a `render_pass` that just clears `framebuffer`:
-	//refsol::Tutorial_render_record_blank_frame(rtg, render_pass, framebuffer, &workspace.command_buffer);
+	// record (into `workspace.command_buffer`) commands that run a `render_pass` that just clears `framebuffer`:
+	// refsol::Tutorial_render_record_blank_frame(rtg, render_pass, framebuffer, &workspace.command_buffer);
 
-	//reset the command buffer(clear old commands):
+	// reset the command buffer(clear old commands):
 	VK(vkResetCommandBuffer(workspace.command_buffer, 0));
-	{//begin recording
+	{ // begin recording
 		VkCommandBufferBeginInfo begin_info{
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,	// WILL RECORD AGAIN EVEERY SUBIT
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, // WILL RECORD AGAIN EVEERY SUBIT
 
 		};
 		VK(vkBeginCommandBuffer(workspace.command_buffer, &begin_info));
 	}
 
-	if (!lines_vertices.empty()) { //upload lines vertice:
+	if (!lines_vertices.empty())
+	{ // upload lines vertice:
 		//[re-]allocate lines buffers is need;
 		size_t needed_bytes = lines_vertices.size() * sizeof(lines_vertices[0]);
 		if (workspace.lines_vertices_src.handle == VK_NULL_HANDLE ||
-			workspace.lines_vertices_src.size < needed_bytes) {
+			workspace.lines_vertices_src.size < needed_bytes)
+		{
 			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
 			size_t new_bytes = ((needed_bytes + 4096) / 4096) * 4096;
-			if (workspace.lines_vertices_src.handle) {
+			if (workspace.lines_vertices_src.handle)
+			{
 				rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices_src));
 			}
-			if (workspace.lines_vertices.handle) {
+			if (workspace.lines_vertices.handle)
+			{
 				rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices));
 			}
-			
+
 			workspace.lines_vertices_src = rtg.helpers.create_buffer(
 				new_bytes,
-				VK_BUFFER_USAGE_TRANSFER_SRC_BIT, //GOING TO HAVE gpu COPY FROM THIS MEMORY
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, //HOST-VISIBLE MORY, COHERENT(NO SPECIAL SYN NEEDED)
-				Helpers::Mapped //get a pointer to the memory
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,											// GOING TO HAVE gpu COPY FROM THIS MEMORY
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, // HOST-VISIBLE MORY, COHERENT(NO SPECIAL SYN NEEDED)
+				Helpers::Mapped																// get a pointer to the memory
 			);
 
 			workspace.lines_vertices = rtg.helpers.create_buffer(
 				new_bytes,
-				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, //going ot use as a vertex buffer , also goin to have GPU into this memory
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //GPU- local memory 
-				Helpers::Unmapped // don;t get a pointer to the memory
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, // going ot use as a vertex buffer , also goin to have GPU into this memory
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,								  // GPU- local memory
+				Helpers::Unmapped													  // don;t get a pointer to the memory
 			);
-
 
 			std::cout << "Re-allocationed lines buffers to " << new_bytes << " bytes." << std::endl;
 		}
 		assert(workspace.lines_vertices_src.size == workspace.lines_vertices.size);
 		assert(workspace.lines_vertices_src.size >= needed_bytes);
 
-		//host-side copy int lines)vertices-stc;
+		// host-side copy int lines)vertices-stc;
 		assert(workspace.lines_vertices_src.allocation.mapped);
 		std::memcpy(workspace.lines_vertices_src.allocation.data(), lines_vertices.data(), needed_bytes);
-		
-		//GPU doing host to GPu copy 
-		//decice -size copy form lines)_vertical _src -> lines_vertices 
+
+		// GPU doing host to GPu copy
+		// decice -size copy form lines)_vertical _src -> lines_vertices
 		VkBufferCopy copy_region{
 			.srcOffset = 0,
 			.dstOffset = 0,
@@ -738,16 +843,15 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.lines_vertices_src.handle, workspace.lines_vertices.handle, 1, &copy_region);
 	}
 
-	{//upload camera info
+	{ // upload camera info
 		LinesPipeline::Camera camera{
-			.CLIP_FROM_WORLD = CLIP_FROM_WORLD
-		};
+			.CLIP_FROM_WORLD = CLIP_FROM_WORLD};
 		assert(workspace.Camera_src.size == sizeof(camera));
 
-		//host-side copy into Camera_src:
+		// host-side copy into Camera_src:
 		memcpy(workspace.Camera_src.allocation.data(), &camera, sizeof(camera));
 
-		//ad device-sside copy form Camera_src -> cmera: 
+		// ad device-sside copy form Camera_src -> cmera:
 		assert(workspace.Camera_src.size == workspace.Camera.size);
 		VkBufferCopy copy_region{
 			.srcOffset = 0,
@@ -756,16 +860,15 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		};
 
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.Camera_src.handle, workspace.Camera.handle, 1, &copy_region);
-
 	}
 
-	{//upload world info
-		assert(workspace.Camera_src.size = sizeof(world));
+	{ // upload world info
+		assert(workspace.Camera_src.size == sizeof(world));
 
-		//host-side copy into Camera_src:
+		// host-side copy into Camera_src:
 		memcpy(workspace.World_src.allocation.data(), &world, sizeof(world));
 
-		//ad device-sside copy form Camera_src -> cmera: 
+		// ad device-sside copy form Camera_src -> cmera:
 		assert(workspace.World_src.size == workspace.World.size);
 		VkBufferCopy copy_region{
 			.srcOffset = 0,
@@ -774,35 +877,38 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		};
 
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.World_src.handle, workspace.World.handle, 1, &copy_region);
-
 	}
 
-	if (!object_instances.empty()) { //upload obecjt transforms
+	if (!object_instances.empty())
+	{ // upload obecjt transforms
 		//[re-]allocate lines buffers is need;
 		size_t needed_bytes = object_instances.size() * sizeof(ObjectsPipeline::Transform);
 		if (workspace.Transforms_src.handle == VK_NULL_HANDLE ||
-			workspace.Transforms_src.size < needed_bytes) {
+			workspace.Transforms_src.size < needed_bytes)
+		{
 			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
 			size_t new_bytes = ((needed_bytes + 4096) / 4096) * 4096;
-			if (workspace.Transforms_src.handle) {
+			if (workspace.Transforms_src.handle)
+			{
 				rtg.helpers.destroy_buffer(std::move(workspace.Transforms_src));
 			}
-			if (workspace.Transforms.handle) {
+			if (workspace.Transforms.handle)
+			{
 				rtg.helpers.destroy_buffer(std::move(workspace.Transforms));
 			}
 
 			workspace.Transforms_src = rtg.helpers.create_buffer(
 				new_bytes,
-				VK_BUFFER_USAGE_TRANSFER_SRC_BIT, //GOING TO HAVE gpu COPY FROM THIS MEMORY
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, //HOST-VISIBLE MORY, COHERENT(NO SPECIAL SYN NEEDED)
-				Helpers::Mapped //get a pointer to the memory
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,											// GOING TO HAVE gpu COPY FROM THIS MEMORY
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, // HOST-VISIBLE MORY, COHERENT(NO SPECIAL SYN NEEDED)
+				Helpers::Mapped																// get a pointer to the memory
 			);
 
 			workspace.Transforms = rtg.helpers.create_buffer(
 				new_bytes,
-				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, //going ot use as a vertex buffer , also goin to have GPU into this memory
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //GPU- local memory 
-				Helpers::Unmapped // don;t get a pointer to the memory
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, // going ot use as a vertex buffer , also goin to have GPU into this memory
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,								   // GPU- local memory
+				Helpers::Unmapped													   // don;t get a pointer to the memory
 			);
 
 			// update the descriptor set:
@@ -812,7 +918,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 				.range = workspace.Transforms.size,
 			};
 
-			std::array < VkWriteDescriptorSet, 1> writes{
+			std::array<VkWriteDescriptorSet, 1> writes{
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = workspace.Transforms_descriptors,
@@ -826,8 +932,8 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 			vkUpdateDescriptorSets(
 				rtg.device,
-				uint32_t(writes.size()), writes.data(), //descriptors count, dat
-				0, nullptr //descripto copies count , data
+				uint32_t(writes.size()), writes.data(), // descriptors count, dat
+				0, nullptr								// descripto copies count , data
 			);
 
 			std::cout << "Re-allocationed objhects buffers to " << new_bytes << " bytes." << std::endl;
@@ -836,17 +942,18 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		assert(workspace.Transforms_src.size >= needed_bytes);
 
 		{
-			//copy transform into Transforms_src
+			// copy transform into Transforms_src
 			assert(workspace.Transforms_src.allocation.mapped);
-			ObjectsPipeline::Transform* out = reinterpret_cast<ObjectsPipeline::Transform * > (workspace.Transforms_src.allocation.data());
-			//strict aliasing violation, but it doesn't matter
-			for (ObjectInstance const& inst : object_instances) {
-				*out = inst.transform; 
+			ObjectsPipeline::Transform *out = reinterpret_cast<ObjectsPipeline::Transform *>(workspace.Transforms_src.allocation.data());
+			// strict aliasing violation, but it doesn't matter
+			for (ObjectInstance const &inst : object_instances)
+			{
+				*out = inst.transform;
 				++out;
 			}
 		}
 
-		//decice -size copy form lines)_vertical _src -> lines_vertices 
+		// decice -size copy form lines)_vertical _src -> lines_vertices
 		VkBufferCopy copy_region{
 			.srcOffset = 0,
 			.dstOffset = 0,
@@ -855,7 +962,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.Transforms_src.handle, workspace.Transforms.handle, 1, &copy_region);
 	}
 
-	{//memory barrier to make sure copies complete before rendign happens:
+	{ // memory barrier to make sure copies complete before rendign happens:
 		VkMemoryBarrier memory_barrier{
 			.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
 			.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
@@ -863,21 +970,21 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		};
 
 		vkCmdPipelineBarrier(workspace.command_buffer,
-			VK_PIPELINE_STAGE_TRANSFER_BIT, //srcStageMask
-			VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStagemask
-			0, //dependency Flags
-			1, &memory_barrier, //mmoryBarriers (count, data)
-			0, nullptr, // bufferMomroyBarrier( count, data)
-			0, nullptr  // imageMemoryBarrier(count, data)
+							 VK_PIPELINE_STAGE_TRANSFER_BIT,	 // srcStageMask
+							 VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStagemask
+							 0,									 // dependency Flags
+							 1, &memory_barrier,				 // mmoryBarriers (count, data)
+							 0, nullptr,						 // bufferMomroyBarrier( count, data)
+							 0, nullptr							 // imageMemoryBarrier(count, data)
 		);
 	}
 
-	{//render pass
-		std::array< VkClearValue, 2 > clear_values{
+	{ // render pass
+		std::array<VkClearValue, 2> clear_values{
 
 			/*VkClearValue{.color{.float32{1.0f, 0.73f, 0.23f, 0.2f } } },*/
 			VkClearValue{.color{.float32{0.0f, 0.0f, 0.0f, 1.0f}}},
-			VkClearValue{.depthStencil{.depth = 1.0f, .stencil = 0 } },
+			VkClearValue{.depthStencil{.depth = 1.0f, .stencil = 0}},
 		};
 
 		VkRenderPassBeginInfo begin_info{
@@ -885,41 +992,59 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 			.renderPass = render_pass,
 			.framebuffer = framebuffer,
-			.renderArea{ 
+			.renderArea{
 				.offset = {.x = 0, .y = 0},
 				.extent = rtg.swapchain_extent,
 			},
-			.clearValueCount = uint32_t (clear_values.size()), 
+			.clearValueCount = uint32_t(clear_values.size()),
 			.pClearValues = clear_values.data(),
 		};
 
-
-
 		vkCmdBeginRenderPass(workspace.command_buffer, &begin_info, VK_SUBPASS_CONTENTS_INLINE);
-	
+
 		// todo: RUNPIPELINES HERE
-		{ //set scissor rectangle
-			VkRect2D scissor{
-				.offset = {.x = 0, .y = 0},
-				.extent = rtg.swapchain_extent,
-			};
-			vkCmdSetScissor(workspace.command_buffer, 0, 1, &scissor);
-		}
-		{
-			VkViewport viewport{
-				.x = 0.0f,
-				.y = 0.0f,
-				.width = float(rtg.swapchain_extent.width),
-				.height = float(rtg.swapchain_extent.height),
-				.minDepth = 0.0f,
-				.maxDepth = 1.0f,
-			};
-			vkCmdSetViewport(workspace.command_buffer, 0, 1, &viewport);
+		{ // set viewport and scissors
+			VkExtent2D extent = rtg.swapchain_extent;
+			VkOffset2D offset = {.x = 0, .y = 0};
+			if (view_camera == SceneCamera)
+			{
+				float camera_aspect = scene.cameras[scene.requested_camera_index].aspect; // W / H
+				float actual_aspect = rtg.swapchain_extent.width / float(rtg.swapchain_extent.height);
+				if (actual_aspect < camera_aspect)
+				{
+					extent.height = uint32_t(float(extent.width) / camera_aspect);
+					offset.y += (rtg.swapchain_extent.height - extent.height) / 2;
+				}
+				else if (actual_aspect > camera_aspect)
+				{
+					extent.width = uint32_t(float(extent.height) * camera_aspect);
+					offset.x += (rtg.swapchain_extent.width - extent.width) / 2;
+				}
+			}
+
+			{ // set scissor rectangle:
+				VkRect2D scissor{
+					.offset = offset,
+					.extent = extent,
+				};
+				vkCmdSetScissor(workspace.command_buffer, 0, 1, &scissor);
+			}
+			{ // configure viewport transform:
+				VkViewport viewport{
+					.x = float(offset.x),
+					.y = float(offset.y),
+					.width = float(extent.width),
+					.height = float(extent.height),
+					.minDepth = 0.0f,
+					.maxDepth = 1.0f,
+				};
+				vkCmdSetViewport(workspace.command_buffer, 0, 1, &viewport);
+			}
 		}
 
 		//{//draw with the backgorun pipeline
 		//	vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, background_pipeline.handle);
-		//	
+		//
 		//	{//push time:
 		//		BackgroundPipeline::Push push{
 		//			.time = float(time),
@@ -929,111 +1054,104 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		//	vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		//}
 
-		//{//draw with the lines pipeline;
-		//	vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
+		if (!lines_vertices.empty())
+		{ // draw with the lines pipeline;
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
 
-		//	{//use lines_vertice (offset 0) as vertex buffer bindign 0:
-		//		std::array < VkBuffer, 1> vertex_buffers{ workspace.lines_vertices.handle };
-		//		std::array <VkDeviceSize, 1> offsets{ 0 };
-		//		vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
-		//
-		//	}
+			{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
+				std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
+				std::array<VkDeviceSize, 1> offsets{0};
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
 
-		//	{//bind teh camera descript set:
-		//		std::array < VkDescriptorSet, 1> descriptor_sets{
-		//			workspace.Camera_descriptors, // 0. camera
-		//		};
-		//		vkCmdBindDescriptorSets(
-		//			workspace.command_buffer, //command_buffer
-		//			VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
-		//			lines_pipeline.layout, //pipline layout 
-		//			0, // first set 
-		//			uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
-		//			0, nullptr // dynamics offsets count, ptr
-		//		);
+			{ // bind teh camera descript set:
+				std::array<VkDescriptorSet, 1> descriptor_sets{
+					workspace.Camera_descriptors, // 0. camera
+				};
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer,								  // command_buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+					lines_pipeline.layout,									  // pipline layout
+					0,														  // first set
+					uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
+					0, nullptr												  // dynamics offsets count, ptr
+				);
+			}
 
-		//	}
+			// draw line vertice
+			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
+		}
 
-		//	//draw line vertice
-		//	vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
-		//}
-
-		if(!object_instances.empty()){//draw with the object pipeline:
+		if (!object_instances.empty())
+		{ // draw with the object pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
-			
-			{//push time:
+
+			{ // push time:
 				ObjectsPipeline::Push push{
 					.time = float(time),
 				};
 				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
 			}
 
-			{//use object vertices (offset 0 ) as vertex buffer binging 0:
-				
-				std::array < VkBuffer, 1 > vertex_buffers{ object_vertices.handle };
-				std::array < VkDeviceSize, 1 > offsets{ 0 };
-				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			{ // use object vertices (offset 0 ) as vertex buffer binging 0:
 
+				std::array<VkBuffer, 1> vertex_buffers{object_vertices.handle};
+				std::array<VkDeviceSize, 1> offsets{0};
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
 			}
-			{//bind world and transforms descript set:
-				std::array< VkDescriptorSet, 2 > descriptor_sets{
-					workspace.World_descriptors, //0: world 
-					workspace.Transforms_descriptors, //1: Transforms
+			{ // bind world and transforms descript set:
+				std::array<VkDescriptorSet, 2> descriptor_sets{
+					workspace.World_descriptors,	  // 0: world
+					workspace.Transforms_descriptors, // 1: Transforms
 				};
 				vkCmdBindDescriptorSets(
-					workspace.command_buffer,  // command buffer
-					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
-					objects_pipeline.layout, //pipline layout
-					0, //first set 
-					uint32_t(descriptor_sets.size()), descriptor_sets.data(), //descriptorr set coutn, ptr
-					0, nullptr// dynamic offset cout, ptr
+					workspace.command_buffer,								  // command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+					objects_pipeline.layout,								  // pipline layout
+					0,														  // first set
+					uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptorr set coutn, ptr
+					0, nullptr												  // dynamic offset cout, ptr
 				);
 			}
 
-			 //camera descriptor set is stil bounde (!)
+			// camera descriptor set is stil bounde (!)
 
-
-			//draw all instaces 
-			for (ObjectInstance const& inst : object_instances) {
+			// draw all instaces
+			for (ObjectInstance const &inst : object_instances)
+			{
 				uint32_t index = uint32_t(&inst - &object_instances[0]);
 
-				//bind texture descriptor set:
+				// bind texture descriptor set:
 
 				vkCmdBindDescriptorSets(
-					workspace.command_buffer, //command buffer
-					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
-					objects_pipeline.layout, //pipeline layout 
-					2, //second set 
-					1, &texture_descriptors[inst.texture], //descriptor sets count, ptr
-					0, nullptr // dynamic offsets count, ptr
+					workspace.command_buffer,			   // command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS,	   // pipeline bind point
+					objects_pipeline.layout,			   // pipeline layout
+					2,									   // second set
+					1, &texture_descriptors[inst.texture], // descriptor sets count, ptr
+					0, nullptr							   // dynamic offsets count, ptr
 				);
 
 				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
 			}
 		}
 
-
-		
 		vkCmdEndRenderPass(workspace.command_buffer);
-	
 	}
 
-	//end recoding
-	VK(vkEndCommandBuffer(workspace.command_buffer) );
+	// end recoding
+	VK(vkEndCommandBuffer(workspace.command_buffer));
 
-	//submit `workspace.command buffer` for the GPU to run:
+	// submit `workspace.command buffer` for the GPU to run:
 	{
-		std::array< VkSemaphore, 1 > wait_semaphores{
-			render_params.image_available
-		};
-		std::array< VkPipelineStageFlags, 1 > wait_stages{
-			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-		};
+		std::array<VkSemaphore, 1> wait_semaphores{
+			render_params.image_available};
+		std::array<VkPipelineStageFlags, 1> wait_stages{
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 		static_assert(wait_semaphores.size() == wait_stages.size(), "every semaphore needs a stage");
 
-		std::array< VkSemaphore, 1 > signal_semaphores{
-			render_params.image_done
-		};
+		std::array<VkSemaphore, 1> signal_semaphores{
+			render_params.image_done};
 		VkSubmitInfo submit_info{
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 			.waitSemaphoreCount = uint32_t(wait_semaphores.size()),
@@ -1049,218 +1167,783 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 	}
 }
 
-
-void Tutorial::update(float dt) {
+void Tutorial::update(float dt)
+{
 	time = std::fmod(time + dt, 60.0f);
 
-	if(camera_mode == CameraMode::Scene)
-	{
-		//camera rotating around the origin: 
-		float ang = float(M_PI) * 2.0f * 10.0f * (time / 60.0f);
-		CLIP_FROM_WORLD = glm::make_mat4((perspective(
-			60.0f * float(M_PI / 180.0f), //vfov 
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), //aspect
-			0.1f, // near 
-			1000.0f //far 
-		) * look_at(
-			3.0f * std::cos(ang), 3.0f * std::sin(ang), 1.0f, //eye
-			0.0f, 0.0f, 0.5f, //target 
-			0.0f, 0.0f, 1.0f //up
-		)).data());
-	}
-	else if (camera_mode == CameraMode::Free) {
-		CLIP_FROM_WORLD = glm::make_mat4((perspective(
-			free_camera.fov,
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
-			free_camera.near,
-			free_camera.far
-			) * orbit(
-				free_camera.target_x, free_camera.target_y, free_camera.target_z, 
-				free_camera.azimuth, free_camera.elevation, free_camera.radius
-			)).data());
-	}
-	else {
-		assert(0 && "only two camera modes");
-	}
+	//if (camera_mode == CameraMode::Scene)
+	//{
+	//	// camera rotating around the origin:
+	//	float ang = float(M_PI) * 2.0f * 10.0f * (time / 60.0f);
+	//	CLIP_FROM_WORLD = glm::make_mat4((perspective(
+	//		60.0f * float(M_PI / 180.0f),									   // vfov
+	//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+	//		0.1f,															   // near
+	//		1000.0f														   // far
+	//	) *
+	//		look_at(
+	//			3.0f * std::cos(ang), 3.0f * std::sin(ang), 1.0f, // eye
+	//			0.0f, 0.0f, 0.5f,									// target
+	//			0.0f, 0.0f, 1.0f									// up
+	//		))
+	//		.data());
+	//}
+	//else if (camera_mode == CameraMode::Free)
+	//{
+	//	CLIP_FROM_WORLD = glm::make_mat4((perspective(
+	//		free_camera.fov,
+	//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+	//		free_camera.near,
+	//		free_camera.far) *
+	//		orbit(
+	//			free_camera.target_x, free_camera.target_y, free_camera.target_z,
+	//			free_camera.azimuth, free_camera.elevation, free_camera.radius))
+	//		.data());
+	//}
+	//else
+	//{
+	//	assert(0 && "only two camera modes");
+	//}
 
-	{//static sun and sky 
-		world.SKY_DIRECTION.x = 0.0f;
-		world.SKY_DIRECTION.y = 0.0f;
-		world.SKY_DIRECTION.z = 1.0f;
-
-		world.SKY_ENERGY.r = 0.1f;
-		world.SKY_ENERGY.g = 0.1f;
-		world.SKY_ENERGY.b = 0.2f;
-
-		world.SUN_DIRECTION.x = 6.0f / 23.0f; 
-		world.SUN_DIRECTION.y = 13.0f / 23.0f; 
-		world.SUN_DIRECTION.x = 18.0f / 23.0f;
-
-		world.SUN_ENERGY.r = 1.0f;
-		world.SUN_ENERGY.g = 1.0f;
-		world.SUN_ENERGY.b = 0.9f;
-
-	}
+	{ // static sun and static sky:
+		// guaranteed to have at most 2 lights
+		assert(scene.lights.size() <= 2);
+		bool sun_defined = false;
+		bool sky_defined = false;
+		glm::vec3 default_directional_light_dir = { 0.0f, 0.0f, 1.0f };
 	
-	{ //make some objects:
+		for (const Scene::Light& light : scene.lights) {
+			glm::mat4x4 cur_light_transform = scene.nodes[light.local_to_world[0]].transform.parent_from_local();
+			for (int i = 1; i < light.local_to_world.size(); ++i) {
+				cur_light_transform *= scene.nodes[light.local_to_world[i]].transform.parent_from_local();
+			}
+			glm::mat3 rotation_matrix = glm::mat3(cur_light_transform);
+			rotation_matrix[0] = glm::normalize(rotation_matrix[0]);
+			rotation_matrix[1] = glm::normalize(rotation_matrix[1]);
+			rotation_matrix[2] = glm::normalize(rotation_matrix[2]);
+			glm::vec3 new_direction = rotation_matrix * default_directional_light_dir;
+
+			if (abs(light.angle - 0.0f) < 0.001f)
+			{
+				sun_defined = true;
+				glm::vec3 energy = light.strength * light.tint;
+				world.SUN_ENERGY.r = energy.r;
+				world.SUN_ENERGY.g = energy.g;
+				world.SUN_ENERGY.b = energy.b;
+				world.SUN_DIRECTION.x = new_direction.x;
+				world.SUN_DIRECTION.y = new_direction.y;
+				world.SUN_DIRECTION.z = new_direction.z;
+			}
+			else if (abs(light.angle - float(M_PI)) < 0.001f)
+			{
+				sky_defined = true;
+				glm::vec3 energy = light.strength * light.tint;
+				world.SKY_ENERGY.r = energy.r;
+				world.SKY_ENERGY.g = energy.g;
+				world.SKY_ENERGY.b = energy.b;
+				world.SKY_DIRECTION.x = new_direction.x;
+				world.SKY_DIRECTION.y = new_direction.y;
+				world.SKY_DIRECTION.z = new_direction.z;
+			}
+		}
+		if (!sky_defined && !sun_defined)
+		{
+			world.SKY_ENERGY.r = .1f;
+			world.SKY_ENERGY.g = .1f;
+			world.SKY_ENERGY.b = .2f;
+
+			world.SUN_ENERGY.r = 5.0f;
+			world.SUN_ENERGY.g = 5.0f;
+			world.SUN_ENERGY.b = 5.0f;
+			world.SKY_DIRECTION.x = 0.0f;
+			world.SKY_DIRECTION.y = 0.0f;
+			world.SKY_DIRECTION.z = 1.0f;
+
+			world.SUN_DIRECTION.x = 0.0f;
+			world.SUN_DIRECTION.y = 0.0f;
+			world.SUN_DIRECTION.z = 1.0f;
+		}
+		else if (!sky_defined)
+		{
+			world.SKY_ENERGY.r = 0.0f;
+			world.SKY_ENERGY.g = 0.0f;
+			world.SKY_ENERGY.b = 0.0f;
+			world.SKY_DIRECTION.x = 0.0f;
+			world.SKY_DIRECTION.y = 0.0f;
+			world.SKY_DIRECTION.z = 1.0f;
+		}
+		else if (!sun_defined)
+		{
+			world.SUN_ENERGY.r = 0.0f;
+			world.SUN_ENERGY.g = 0.0f;
+			world.SUN_ENERGY.b = 0.0f;
+			world.SUN_DIRECTION.x = 0.0f;
+			world.SUN_DIRECTION.y = 0.0f;
+			world.SUN_DIRECTION.z = 1.0f;
+		}
+
+
+		float length = sqrt(world.SUN_DIRECTION.x * world.SUN_DIRECTION.x + world.SUN_DIRECTION.y * world.SUN_DIRECTION.y + world.SUN_DIRECTION.z * world.SUN_DIRECTION.z);
+		world.SKY_DIRECTION.x /= length;
+		world.SKY_DIRECTION.y /= length;
+		world.SKY_DIRECTION.z /= length;
+	}
+
+	{ // update the animations according to the drivers
+		scene.update_drivers(dt);
+	}
+	if (view_camera == InSceneCamera::SceneCamera || culling_camera == InSceneCamera::SceneCamera) {
+		Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
+		glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.parent_from_local();
+		for (int i = 1; i < cur_camera.local_to_world.size(); ++i)
+		{
+			cur_camera_transform *= scene.nodes[cur_camera.local_to_world[i]].transform.parent_from_local();
+		}
+		glm::vec3 eye = glm::vec3(cur_camera_transform[3]);
+		glm::vec3 forward = -glm::vec3(cur_camera_transform[2]);
+		glm::vec3 target = eye + forward;
+
+		view_from_world[0] = glm::make_mat4((perspective(
+			cur_camera.vfov,	 // vfov
+			cur_camera.aspect, // aspect
+			cur_camera.near,	 // near
+			cur_camera.far	 // far
+		) *
+			look_at(
+				eye.x, eye.y, eye.z,			// eye
+				target.x, target.y, target.z, // target
+				0.0f, 0.0f, 1.0f				// up
+			)).data());
+
+
+		clip_from_view[0] = glm::make_mat4(perspective(
+			cur_camera.vfov, //vfov
+			cur_camera.aspect, //aspect
+			cur_camera.near, //near
+			cur_camera.far //far
+		).data());
+
+
+		scene_cam_frustum = make_frustum(
+			cur_camera.vfov, //vfov
+			cur_camera.aspect, //aspect
+			cur_camera.near, //near
+			cur_camera.far //far
+		);
+
+		if (view_camera == InSceneCamera::SceneCamera)
+			CLIP_FROM_WORLD = clip_from_view[0] * view_from_world[0];
+	}
+	if (view_camera != InSceneCamera::SceneCamera) { // check if aspect ratio changed
+		static float last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
+
+		if (last_aspect != float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height))
+		{
+			clip_from_view[1] = glm::make_mat4(perspective(
+				60.0f * float(M_PI) / 180.0f,									  // vfov
+				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+				0.1f,															  // near
+				1000.0f														  // far
+			)
+				.data());
+
+			user_cam_frustum = make_frustum(
+				60.0f * float(M_PI) / 180.0f, //vfov
+				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), //aspect
+				0.1f, //near
+				1000.0f //far
+			);
+			clip_from_view[2] = clip_from_view[1];
+			FreeCamera& cam = (view_camera == InSceneCamera::UserCamera) ? user_camera : debug_camera;
+			update_free_camera(cam);
+			last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
+		}
+	}
+	lines_vertices.clear();
+	std::array<glm::vec3, 8> frustum_vertices;
+
+	if (rtg.configuration.culling_settings == 1) { // frustum culling is on
+		glm::mat4x4 world_from_clip = glm::inverse(culling_camera == SceneCamera ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
+		std::array<glm::vec4, 8> clip_space_coordinates = {
+			glm::vec4(1.0f,  1.0f, 0.0f, 1.0f),   // Near top right
+			glm::vec4(-1.0f,  1.0f, 0.0f, 1.0f),  // Near top left
+			glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),   // Near bottom right
+			glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f),  // Near bottom left
+			glm::vec4(1.0f,  1.0f, 1.0f, 1.0f),   // Far top right
+			glm::vec4(-1.0f,  1.0f, 1.0f, 1.0f),  // Far top left
+			glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),   // Far bottom right
+			glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)   // Far bottom left
+		};
+		// Transform clip space to world space and apply perspective divide
+		for (int j = 0; j < 8; ++j) {
+			glm::vec4 world_space_vertex = world_from_clip * clip_space_coordinates[j];
+			frustum_vertices[j] = glm::vec3(world_space_vertex) / world_space_vertex.w;
+		}
+	}
+	{// render last active frustum if in debug mode
+		if (view_camera == DebugCamera) {
+			if (rtg.configuration.culling_settings != 1) {
+				glm::mat4x4 world_from_clip = glm::inverse(culling_camera == SceneCamera ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
+				std::array<glm::vec4, 8> clip_space_coordinates = {
+					glm::vec4(1.0f,  1.0f, 0.0f, 1.0f),   // Near top right
+					glm::vec4(-1.0f,  1.0f, 0.0f, 1.0f),  // Near top left
+					glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),   // Near bottom right
+					glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f),  // Near bottom left
+					glm::vec4(1.0f,  1.0f, 1.0f, 1.0f),   // Far top right
+					glm::vec4(-1.0f,  1.0f, 1.0f, 1.0f),  // Far top left
+					glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),   // Far bottom right
+					glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)   // Far bottom left
+				};
+				// Transform clip space to world space and apply perspective divide
+				for (int j = 0; j < 8; ++j) {
+					glm::vec4 world_space_vertex = world_from_clip * clip_space_coordinates[j];
+					frustum_vertices[j] = glm::vec3(world_space_vertex) / world_space_vertex.w;
+				}
+			}
+
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[0].x, .y = frustum_vertices[0].y, .z = frustum_vertices[0].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[1].x, .y = frustum_vertices[1].y, .z = frustum_vertices[1].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[0].x, .y = frustum_vertices[0].y, .z = frustum_vertices[0].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[2].x, .y = frustum_vertices[2].y, .z = frustum_vertices[2].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[2].x, .y = frustum_vertices[2].y, .z = frustum_vertices[2].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[3].x, .y = frustum_vertices[3].y, .z = frustum_vertices[3].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[3].x, .y = frustum_vertices[3].y, .z = frustum_vertices[3].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[1].x, .y = frustum_vertices[1].y, .z = frustum_vertices[1].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[0].x, .y = frustum_vertices[0].y, .z = frustum_vertices[0].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[4].x, .y = frustum_vertices[4].y, .z = frustum_vertices[4].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[4].x, .y = frustum_vertices[4].y, .z = frustum_vertices[4].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[6].x, .y = frustum_vertices[6].y, .z = frustum_vertices[6].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[2].x, .y = frustum_vertices[2].y, .z = frustum_vertices[2].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[6].x, .y = frustum_vertices[6].y, .z = frustum_vertices[6].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[4].x, .y = frustum_vertices[4].y, .z = frustum_vertices[4].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[5].x, .y = frustum_vertices[5].y, .z = frustum_vertices[5].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[6].x, .y = frustum_vertices[6].y, .z = frustum_vertices[6].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[7].x, .y = frustum_vertices[7].y, .z = frustum_vertices[7].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[1].x, .y = frustum_vertices[1].y, .z = frustum_vertices[1].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[5].x, .y = frustum_vertices[5].y, .z = frustum_vertices[5].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[3].x, .y = frustum_vertices[3].y, .z = frustum_vertices[3].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[7].x, .y = frustum_vertices[7].y, .z = frustum_vertices[7].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[5].x, .y = frustum_vertices[5].y, .z = frustum_vertices[5].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[7].x, .y = frustum_vertices[7].y, .z = frustum_vertices[7].z},
+				.Color{.r = 0xff, .g = 0x00, .b = 0xc9, .a = 0xff},
+				});
+		}
+	}
+
+	{ // fill object instances with scene hiearchy
 		object_instances.clear();
+
+		glm::mat4x4 frustum_view_from_world = culling_camera == SceneCamera ? view_from_world[0] : view_from_world[1];
 
 		std::deque<glm::mat4x4> transform_stack;
 		// std::cout<<"---------------------start-----------------"<<std::endl;
 
-		std::function<void(uint32_t)> draw_node = [&](uint32_t i) {
-			Scene::Node& cur_node = scene.nodes[i];
-			glm::mat4x4 cur_node_transform_in_parent = cur_node.transform.parent_from_local();
-			if (transform_stack.empty()) {
-				transform_stack.push_back(cur_node_transform_in_parent);
-			}
-			else {
-				glm::mat4x4 parent_node_transform_in_world = transform_stack.back();
-				transform_stack.push_back(parent_node_transform_in_world * cur_node_transform_in_parent);
-			}
-			// draw own mesh
-			if (int32_t cur_mesh_index = cur_node.mesh_index; cur_mesh_index != -1) {
-				glm::mat4x4 WORLD_FROM_LOCAL = transform_stack.back();
-				uint32_t texture_index = 0;
-				if (scene.meshes[cur_mesh_index].material_index != -1) {
-					texture_index = scene.materials[scene.meshes[cur_mesh_index].material_index].texture_index + 1;
+		std::function<void(uint32_t)> draw_node = [&](uint32_t i)
+			{
+				Scene::Node& cur_node = scene.nodes[i];
+				glm::mat4x4 cur_node_transform_in_parent = cur_node.transform.parent_from_local();
+				if (transform_stack.empty())
+				{
+					transform_stack.push_back(cur_node_transform_in_parent);
 				}
-				// std::cout<<"node name: "<<cur_node.name<<std::endl;
-				// std::cout<<"drawing "<<cur_mesh_index<<std::endl;
-				// std::cout<<"start: "<<mesh_vertices[cur_mesh_index].first<<" ,count: "<<mesh_vertices[cur_mesh_index].count<<std::endl;
+				else
+				{
+					glm::mat4x4 parent_node_transform_in_world = transform_stack.back();
+					transform_stack.push_back(parent_node_transform_in_world * cur_node_transform_in_parent);
+				}
 
-				object_instances.emplace_back(ObjectInstance{
-					.vertices = mesh_vertices[cur_mesh_index],
-					.transform{
-						.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
-						.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
-						.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
-					},
-					.texture = texture_index,
+				// draw children mesh
+				for (uint32_t child_index : cur_node.children)
+				{
+					draw_node(child_index);
+				}
+
+				// draw own mesh
+				if (int32_t cur_mesh_index = cur_node.mesh_index; cur_mesh_index != -1)
+				{
+					glm::mat4x4 WORLD_FROM_LOCAL = transform_stack.back();
+					{	  // cull the mesh if it is outside of the view frustum
+						OBB obb = AABB_transform_to_OBB(WORLD_FROM_LOCAL, mesh_AABBs[cur_mesh_index]);
+						if (view_camera == DebugCamera) {//debug draw the OBBs
+							std::array<glm::vec3, 8> vertices = {
+								obb.center + obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+								obb.center + obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2],
+								obb.center + obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+								obb.center + obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2],
+								obb.center - obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+								obb.center - obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2],
+								obb.center - obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+								obb.center - obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2] };
+
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[0].x, .y = vertices[0].y, .z = vertices[0].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[1].x, .y = vertices[1].y, .z = vertices[1].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[0].x, .y = vertices[0].y, .z = vertices[0].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[2].x, .y = vertices[2].y, .z = vertices[2].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[2].x, .y = vertices[2].y, .z = vertices[2].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[3].x, .y = vertices[3].y, .z = vertices[3].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[3].x, .y = vertices[3].y, .z = vertices[3].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[1].x, .y = vertices[1].y, .z = vertices[1].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[0].x, .y = vertices[0].y, .z = vertices[0].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[4].x, .y = vertices[4].y, .z = vertices[4].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[4].x, .y = vertices[4].y, .z = vertices[4].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[6].x, .y = vertices[6].y, .z = vertices[6].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[2].x, .y = vertices[2].y, .z = vertices[2].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[6].x, .y = vertices[6].y, .z = vertices[6].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[4].x, .y = vertices[4].y, .z = vertices[4].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[5].x, .y = vertices[5].y, .z = vertices[5].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[6].x, .y = vertices[6].y, .z = vertices[6].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[7].x, .y = vertices[7].y, .z = vertices[7].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[1].x, .y = vertices[1].y, .z = vertices[1].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[5].x, .y = vertices[5].y, .z = vertices[5].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[3].x, .y = vertices[3].y, .z = vertices[3].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[7].x, .y = vertices[7].y, .z = vertices[7].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[5].x, .y = vertices[5].y, .z = vertices[5].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+							lines_vertices.emplace_back(PosColVertex{
+								.Position{.x = vertices[7].x, .y = vertices[7].y, .z = vertices[7].z},
+								.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+								});
+
+						}
+						if (rtg.configuration.culling_settings == 1 && !check_frustum_obb_intersection(frustum_vertices, obb)) {
+							transform_stack.pop_back();
+							return;
+						}
+					}
+					uint32_t texture_index = 0;
+					if (scene.meshes[cur_mesh_index].material_index != -1)
+					{
+						texture_index = scene.materials[scene.meshes[cur_mesh_index].material_index].texture_index + 1;
+					}
+
+					// std::cout<<"node name: "<<cur_node.name<<std::endl;
+					// std::cout<<"drawing "<<cur_mesh_index<<std::endl;
+					// std::cout<<"start: "<<mesh_vertices[cur_mesh_index].first<<" ,count: "<<mesh_vertices[cur_mesh_index].count<<std::endl;
+
+					object_instances.emplace_back(ObjectInstance{
+						.vertices = mesh_vertices[cur_mesh_index],
+						.transform{
+							.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+							.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+							.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+						},
+						.texture = texture_index,
 					});
-			}
-			// draw children mesh
-			for (uint32_t child_index : cur_node.children) {
-				draw_node(child_index);
-			}
-			transform_stack.pop_back();
-		};
-
-		//traverse the scene hiearchy:
-		for (uint32_t i = 0; i < scene.root_nodes.size(); ++i) {
-			transform_stack.clear();
-			draw_node(scene.root_nodes[i]);
-		}
-
-		
-	}
-
-}
 
 
-void Tutorial::on_input(InputEvent const &evt) {
-	//if there is a current saction, it get input priority: 
-	if (action) {
-		action(evt);
-		return;
-	}
-
-
-	//general controls:
-	if (evt.type == InputEvent::KeyDown && evt.key.key == GLFW_KEY_TAB) {
-		// swithc camera mode 
-		camera_mode = CameraMode((int(camera_mode) + 1) % 2);
-		return;
-	}
-
-	//free camera controls:
-	if (camera_mode == CameraMode::Free) {
-		if (evt.type == InputEvent::MouseWheel) {
-			//change distance by 10% every scoll click : 
-			free_camera.radius *= std::exp(std::log(1.1f) * -evt.wheel.y);
-
-			//make sure camera isn't too close or too far from target: 
-			free_camera.radius = std::max(free_camera.radius, 0.5f * free_camera.near);
-			free_camera.radius = std::min(free_camera.radius, 2.0f * free_camera.far);
-			return;
-		}
-
-		if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT && (evt.button.mods & GLFW_MOD_SHIFT)) {
-			//start panning
-			
-			float init_x = evt.button.x;
-			float init_y = evt.button.y;
-			OrbitCamera init_camera = free_camera;
-
-
-			action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
-				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
-					//cancle uypon button lifted: 
-					action = nullptr;
-					return;
-				}
-				if (evt.type == InputEvent::MouseMotion) {
-					//handle motion 
-
-					//image height at plane of target pont: 
-					float height = 2.0f * std::tan(free_camera.fov * 0.5f) * free_camera.radius;
-
-					//motion, therefore at target piont: 
-					float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height * height;
-					float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height * height;
-					//negative belcoe glfw useing y-down coordinat system 
-
-
-					//compute camera transform to extract right 
-					mat4 camera_from_world = orbit(
-						init_camera.target_x, init_camera.target_y, init_camera.target_z,
-						init_camera.azimuth, init_camera.elevation, init_camera.radius
-					);
-
-					//move the desiere ddistance
-					free_camera.target_x = init_camera.target_x - dx * camera_from_world[0] - dy * camera_from_world[1];
-					free_camera.target_y = init_camera.target_y - dx * camera_from_world[4] - dy * camera_from_world[5];
-					free_camera.target_z = init_camera.target_z - dx * camera_from_world[8] - dy * camera_from_world[9];
-
-					return;
-				}
+					transform_stack.pop_back();
 				};
 
-		}
-		else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
-			//start tumbling
-
-
-			float init_x = evt.button.x;
-			float init_y = evt.button.y;
-			OrbitCamera init_camera = free_camera;
-
-			action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
-				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
-					action = nullptr; 
-					return;
+				// traverse the scene hiearchy:
+				for (uint32_t j = 0; j < scene.root_nodes.size(); ++j)
+				{
+					transform_stack.clear();
+					draw_node(scene.root_nodes[j]);
 				}
-				if (evt.type == InputEvent::MouseMotion) {
-					//motion, normalized so 1.0 is window height:
-					float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height;
-				float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height; //note: negated because glfw uses y-down coordinate system
 
-					//rotate camera based on motion:
-					float speed = float(M_PI); //how much rotation happens at one full window height
-					float flip_x = (std::abs(init_camera.elevation) > 0.5f * float(M_PI) ? -1.0f : 1.0f); //switch azimuth rotation when camera is upside-down
-					free_camera.azimuth = init_camera.azimuth - dx * speed * flip_x;
-					free_camera.elevation = init_camera.elevation - dy * speed;
-
-					//reduce azimuth and elevation to [-pi,pi] range:
-					const float twopi = 2.0f * float(M_PI);
-					free_camera.azimuth -= std::round(free_camera.azimuth / twopi) * twopi;
-					free_camera.elevation -= std::round(free_camera.elevation / twopi) * twopi;
-					return;
-				}
 			};
-
+	}
+}
+	/*
+	void Tutorial::on_input(InputEvent const &evt) {
+		//if there is a current saction, it get input priority:
+		if (action) {
+			action(evt);
 			return;
 		}
 
+
+		//general controls:
+		if (evt.type == InputEvent::KeyDown && evt.key.key == GLFW_KEY_TAB) {
+			// swithc camera mode
+			camera_mode = CameraMode((int(camera_mode) + 1) % 2);
+			return;
+		}
+
+		//free camera controls:
+		if (camera_mode == CameraMode::Free) {
+			if (evt.type == InputEvent::MouseWheel) {
+				//change distance by 10% every scoll click :
+				free_camera.radius *= std::exp(std::log(1.1f) * -evt.wheel.y);
+
+				//make sure camera isn't too close or too far from target:
+				free_camera.radius = std::max(free_camera.radius, 0.5f * free_camera.near);
+				free_camera.radius = std::min(free_camera.radius, 2.0f * free_camera.far);
+				return;
+			}
+
+			if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT && (evt.button.mods & GLFW_MOD_SHIFT)) {
+				//start panning
+
+				float init_x = evt.button.x;
+				float init_y = evt.button.y;
+				OrbitCamera init_camera = free_camera;
+
+
+				action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
+					if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
+						//cancle uypon button lifted:
+						action = nullptr;
+						return;
+					}
+					if (evt.type == InputEvent::MouseMotion) {
+						//handle motion
+
+						//image height at plane of target pont:
+						float height = 2.0f * std::tan(free_camera.fov * 0.5f) * free_camera.radius;
+
+						//motion, therefore at target piont:
+						float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height * height;
+						float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height * height;
+						//negative belcoe glfw useing y-down coordinat system
+
+
+						//compute camera transform to extract right
+						mat4 camera_from_world = orbit(
+							init_camera.target_x, init_camera.target_y, init_camera.target_z,
+							init_camera.azimuth, init_camera.elevation, init_camera.radius
+						);
+
+						//move the desiere ddistance
+						free_camera.target_x = init_camera.target_x - dx * camera_from_world[0] - dy * camera_from_world[1];
+						free_camera.target_y = init_camera.target_y - dx * camera_from_world[4] - dy * camera_from_world[5];
+						free_camera.target_z = init_camera.target_z - dx * camera_from_world[8] - dy * camera_from_world[9];
+
+						return;
+					}
+					};
+
+			}
+			else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
+				//start tumbling
+
+
+				float init_x = evt.button.x;
+				float init_y = evt.button.y;
+				OrbitCamera init_camera = free_camera;
+
+				action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
+					if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
+						action = nullptr;
+						return;
+					}
+					if (evt.type == InputEvent::MouseMotion) {
+						//motion, normalized so 1.0 is window height:
+						float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height;
+					float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height; //note: negated because glfw uses y-down coordinate system
+
+						//rotate camera based on motion:
+						float speed = float(M_PI); //how much rotation happens at one full window height
+						float flip_x = (std::abs(init_camera.elevation) > 0.5f * float(M_PI) ? -1.0f : 1.0f); //switch azimuth rotation when camera is upside-down
+						free_camera.azimuth = init_camera.azimuth - dx * speed * flip_x;
+						free_camera.elevation = init_camera.elevation - dy * speed;
+
+						//reduce azimuth and elevation to [-pi,pi] range:
+						const float twopi = 2.0f * float(M_PI);
+						free_camera.azimuth -= std::round(free_camera.azimuth / twopi) * twopi;
+						free_camera.elevation -= std::round(free_camera.elevation / twopi) * twopi;
+						return;
+					}
+				};
+
+				return;
+			}
+
+		}
+	}*/
+
+	void Tutorial::on_input(InputEvent const &event)
+	{
+
+		bool update_camera = false;
+
+		// switches camera mode from scene, view, and debug
+		if (event.type == InputEvent::Type::KeyDown && (event.key.key == GLFW_KEY_1 || event.key.key == GLFW_KEY_2 || event.key.key == GLFW_KEY_3)) {
+
+			if (event.key.key == GLFW_KEY_1) {
+				if (scene.cameras.empty()) {
+					std::cerr << "There are no scene camera in the scene, unable to switch\n";
+				}
+				else {
+					view_camera = InSceneCamera::SceneCamera;
+					culling_camera = InSceneCamera::SceneCamera;
+				}
+				return;
+			}
+			else if (event.key.key == GLFW_KEY_2) {
+				view_camera = InSceneCamera::UserCamera;
+				culling_camera = InSceneCamera::UserCamera;
+			}
+			else if (event.key.key == GLFW_KEY_3) {
+				view_camera = InSceneCamera::DebugCamera;
+			}
+			update_camera = true;
+
+		
+		}
+
+		if (view_camera == InSceneCamera::SceneCamera)
+		{
+			if (event.type == InputEvent::Type::KeyDown)
+			{
+				if (event.key.key == GLFW_KEY_LEFT)
+				{
+					if (scene.cameras.size() == 1)
+					{
+						std::cout << "Only one camera available, unable to switch to another scene camera" << std::endl;
+						return;
+					}
+					scene.requested_camera_index = (scene.requested_camera_index - 1 + int32_t(scene.cameras.size())) % scene.cameras.size();
+					std::cout << "Now viewing through camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
+				}
+				else if (event.key.key == GLFW_KEY_RIGHT)
+				{
+					if (scene.cameras.size() == 1)
+					{
+						std::cout << "Only one camera available, unable to switch to another scene camera" << std::endl;
+						return;
+					}
+					scene.requested_camera_index = (scene.requested_camera_index + 1) % scene.cameras.size();
+					std::cout << "Now viewing through camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
+				}
+			}
+			return;
+		}
+
+		FreeCamera &cam = (view_camera == InSceneCamera::UserCamera) ? user_camera : debug_camera;
+		switch (event.type)
+		{
+		case InputEvent::Type::MouseMotion:
+			if (event.motion.state && !shift_down)
+			{
+				if (previous_mouse_x != -1.0f)
+				{
+					update_camera = true;
+					if (upside_down)
+					{
+						cam.azimuth += (event.motion.x - previous_mouse_x) * 3.0f;
+					}
+					else
+					{
+						cam.azimuth -= (event.motion.x - previous_mouse_x) * 3.0f;
+					}
+					cam.elevation += (event.motion.y - previous_mouse_y) * 3.0f;
+					cam.azimuth = fmod(cam.azimuth, 2.0f * float(M_PI));
+					cam.elevation = fmod(cam.elevation, 2.0f * float(M_PI));
+				}
+				previous_mouse_x = event.motion.x;
+				previous_mouse_y = event.motion.y;
+			}
+			else if (event.motion.state && shift_down)
+			{
+				if (previous_mouse_x != -1.0f)
+				{
+					update_camera = true;
+					glm::vec3 forward = glm::normalize(cam.target - cam.eye);							// Forward direction
+					glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f))); // Right vector
+					glm::vec3 up = glm::cross(right, forward);											// Up vector
+
+					float pan_sensitivity = 2.0f * std::max(cam.radius, 0.5f);
+					if (upside_down)
+					{
+						cam.target += right * (event.motion.x - previous_mouse_x) * pan_sensitivity;
+					}
+					else
+					{
+						cam.target -= right * (event.motion.x - previous_mouse_x) * pan_sensitivity;
+					}
+					cam.target += up * (event.motion.y - previous_mouse_y) * pan_sensitivity;
+				}
+				previous_mouse_x = event.motion.x;
+				previous_mouse_y = event.motion.y;
+			}
+			break;
+		case InputEvent::Type::KeyDown:
+			if (event.key.key == GLFW_KEY_LEFT_SHIFT)
+			{
+				shift_down = true;
+			}
+			break;
+		case InputEvent::Type::KeyUp:
+			if (event.key.key == GLFW_KEY_LEFT_SHIFT)
+			{
+				shift_down = false;
+			}
+			break;
+		case InputEvent::Type::MouseButtonDown:
+			upside_down = (int((abs(cam.elevation) + float(M_PI) / 2) / float(M_PI)) % 2 == 1);
+			break;
+		case InputEvent::Type::MouseButtonUp:
+			previous_mouse_x = -1.0f;
+			break;
+		case InputEvent::Type::MouseWheel:
+			cam.radius = std::max(cam.radius - event.wheel.y * 0.5f, 0.001f);
+			update_camera = true;
+			break;
+		}
+		if (update_camera)
+		{
+			update_free_camera(cam);
+		}
 	}
-}
+
+	void Tutorial::update_free_camera(FreeCamera & cam)
+	{
+		assert(cam.type != SceneCamera);
+		float x = cam.radius * std::cos(cam.elevation) * std::cos(cam.azimuth);
+		float y = cam.radius * std::cos(cam.elevation) * std::sin(cam.azimuth);
+		float z = cam.radius * std::sin(cam.elevation);
+		float up = 1.0f;
+		// flip up axis when upside down
+		if (int((abs(cam.elevation) + float(M_PI) / 2) / float(M_PI)) % 2 == 1)
+		{
+			up = -1.0f;
+		}
+		cam.eye = glm::vec3{x, y, z} + cam.target;
+		uint8_t type = static_cast<uint8_t>(cam.type);
+		view_from_world[type] = glm::make_mat4(look_at(
+			cam.eye.x, cam.eye.y, cam.eye.z, //eye
+			cam.target.x, cam.target.y, cam.target.z, //target
+			0.0f, 0.0f, up //up
+		).data());
+
+		CLIP_FROM_WORLD = clip_from_view[type] * view_from_world[type];
+	}

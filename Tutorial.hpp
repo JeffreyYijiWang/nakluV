@@ -5,6 +5,7 @@
 #include "mat4.hpp"
 #include "RTG.hpp"
 #include "scene.hpp"
+#include "frustum_culling.hpp"
 #include "GLM.hpp"
 
 
@@ -151,6 +152,7 @@ struct Tutorial : RTG::Application {
 		uint32_t count = 0;
 	};
 	std::vector<ObjectVertices> mesh_vertices;
+	std::vector<AABB> mesh_AABBs; // also indexed the same as scene.meshes
 
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
@@ -170,9 +172,11 @@ struct Tutorial : RTG::Application {
 
 	//--------------------------------------------------------------------
 	//Resources that change when time passes or the user interacts:
+	struct FreeCamera;
 
 	virtual void update(float dt) override;
 	virtual void on_input(InputEvent const &) override;
+	void update_free_camera(FreeCamera& camera);
 
 	//modal action, intercepts inputs:
 	std::function< void(InputEvent const&)> action;
@@ -210,6 +214,39 @@ struct Tutorial : RTG::Application {
 	};
 
 	std::vector < ObjectInstance > object_instances;
+
+	enum InSceneCamera {
+		SceneCamera = 0,
+		UserCamera = 1,
+		DebugCamera = 2
+	};
+	InSceneCamera view_camera = InSceneCamera::SceneCamera;
+
+	struct FreeCamera
+	{
+		InSceneCamera type;
+		glm::vec3 target = { 0.0f, 0.0f, 0.5f };
+		float radius = 10.0f;
+		float azimuth = 0.0f;
+		float elevation = 0.785398163f; //Pi/4
+		glm::vec3 eye = {
+			radius * std::cos(elevation) * std::cos(azimuth),
+			radius * std::cos(elevation) * std::sin(azimuth),
+			radius * std::sin(elevation)
+		};
+	} user_camera, debug_camera;
+
+	float previous_mouse_x = -1.0f, previous_mouse_y = -1.0f;
+	bool shift_down = false;
+	bool upside_down = false;
+
+
+	CullingFrustum scene_cam_frustum, user_cam_frustum;
+
+	InSceneCamera culling_camera = InSceneCamera::SceneCamera;
+
+	std::array<glm::mat4x4, 3> clip_from_view;
+	std::array<glm::mat4x4, 3> view_from_world;
 	//--------------------------------------------------------------------
 	//Rendering function, uses all the resources above to queue work to draw a frame:
 

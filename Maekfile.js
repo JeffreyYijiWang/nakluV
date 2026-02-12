@@ -32,6 +32,7 @@ const main_objs = [
 	maek.CPP('PosColVertex.cpp'),
 	maek.CPP('PosNorTexVertex.cpp'),
 	maek.CPP('Helpers.cpp'),
+	maek.CPP('frustum_culling.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('PosNorTanTexVertex.cpp'),
 	maek.CPP('scene.cpp'),

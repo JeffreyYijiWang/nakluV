@@ -12,9 +12,11 @@
  * Designed for Real-Time Graphics A1.
  */
 
-struct Scene {
+struct Scene
+{
 
-    struct Transform {
+    struct Transform
+    {
         glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
         glm::quat rotation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f); // w, x, y, z
         glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
@@ -23,16 +25,19 @@ struct Scene {
         glm::mat4x4 local_from_parent() const;
     };
 
-    struct Camera {
+    struct Camera
+    {
         std::string name;
         /*enum class Type { Perspective, Orthographic } type = Type::Perspective;*/
         float aspect;
         float vfov;
         float near;
-        float far = -1.0f; // If far <= 0, use infinite projection
+        float far = -1.0f;                    // If far <= 0, use infinite projection
+        std::vector<uint32_t> local_to_world; // list of node indices to get from local to world (index 0 is a root node)
     };
 
-    struct Texture {
+    struct Texture
+    {
         std::string source = "";
         glm::vec3 value;
         bool is_2D = true;
@@ -40,25 +45,27 @@ struct Scene {
 
         Texture(std::string source_) : source(source_), is_2D(true), has_src(true) {};
         Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false) {};
-        Texture() : value({ 1,1,1 }), is_2D(true), has_src(false) {};
-        //enum class Type { Dim2D, Cube } type = Type::Dim2D;
-        //enum class Format { Linear, SRGB, RGBE } format = Format::Linear;
+        Texture() : value({1, 1, 1}), is_2D(true), has_src(false) {};
+        // enum class Type { Dim2D, Cube } type = Type::Dim2D;
+        // enum class Format { Linear, SRGB, RGBE } format = Format::Linear;
 
         // Vulkan handles (populated during load/init)
-      /*  VkImage image = VK_NULL_HANDLE;
-        VkImageView view = VK_NULL_HANDLE;*/
+        /*  VkImage image = VK_NULL_HANDLE;
+          VkImageView view = VK_NULL_HANDLE;*/
     };
 
-    struct Material {
+    struct Material
+    {
         std::string name;
         uint32_t texture_index;
     };
 
-    struct Mesh {
+    struct Mesh
+    {
         std::string name;
-       
 
-        struct Attribute {
+        struct Attribute
+        {
             std::string source = "";
             uint32_t offset;
             uint32_t stride;
@@ -72,7 +79,8 @@ struct Scene {
         int32_t material_index = -1;
     };
 
-    struct Light {
+    struct Light
+    {
         std::string name;
         glm::vec3 tint = glm::vec3(1.0f);
         float shadow = 0.0f;
@@ -80,9 +88,12 @@ struct Scene {
         // Sun properties
         float angle = 0.0f;
         float strength = 1.0f;
+
+        std::vector<uint32_t> local_to_world; // list of node indices to get from local to world (index 0 is a root node)
     };
 
-    struct Node {
+    struct Node
+    {
         std::string name;
         Transform transform;
         std::vector<uint32_t> children;
@@ -92,9 +103,31 @@ struct Scene {
         int32_t light_index = -1;
     };
 
+    struct Driver
+    {
+        std::string name;
+        uint32_t node_index;
+        enum Channel
+        {
+            Translation = 0,
+            Scale = 1,
+            Rotation = 2,
+        } channel;
+        std::vector<float> times;
+        std::vector<float> values;
+        enum InterpolationMode
+        {
+            STEP,
+            LINEAR,
+            SLERP,
+        } interpolation = LINEAR;
+        uint32_t cur_time_index = 0;
+        float cur_time = 0.0f;
+    };
     // Data Storage
     std::vector<Node> nodes;
     std::vector<Camera> cameras;
+    int32_t requested_camera_index = -1;
     std::vector<Light> lights;
     std::vector<Mesh> meshes;
     uint32_t vertices_count = 0;
@@ -102,12 +135,13 @@ struct Scene {
     std::vector<Texture> textures;
     std::vector<uint32_t> root_nodes;
     std::string scene_path;
-
+    std::vector<Driver> drivers;
+    uint8_t animation_setting;
     // Functions
-    Scene(std::string const& filename);
-    void load(std::string const& filename);
+    Scene(std::string filename, std::optional<std::string> camera, uint8_t animation_setting);
+    void load(std::string file_path, std::optional<std::string> requested_camera);
     void debug();
-
+    void update_drivers(float dt);
     //// Helper to find a node by name (useful for drivers/cameras)
-    //uint32_t find_node(std::string const& name) const;
+    // uint32_t find_node(std::string const& name) const;
 };

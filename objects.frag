@@ -116,5 +116,5 @@ void main() {
     vec3 sun = (SUN_ENERGY * sunTint) * ndl * day;
 
     vec3 e = sky + sun;
-    outColor = vec4(e * albedo, 1.0);
+    outColor = vec4(albedo, 1.0);
 }
