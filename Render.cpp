@@ -1,4 +1,4 @@
-#include "Tutorial.hpp"
+#include "Render.hpp"
 
 #include "VK.hpp"
 	
@@ -11,7 +11,7 @@
 #include <iostream>
 #include <algorithm>
 
-Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
+Render::Render(RTG &rtg_) : rtg(rtg_) {
 	//select a depth format:
 	//at least on of these two must be supported, arrourding to the spec; but neihet are required
 
@@ -992,7 +992,7 @@ Tutorial::Tutorial(RTG &rtg_) : rtg(rtg_) {
 	}
 }
 
-Tutorial::~Tutorial() {
+Render::~Render() {
 	//just in case rendering is still in flight, don't destroy resources:
 	//(not using VK macro to avoid throw-ing in destructor)
 	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS) {
@@ -1089,7 +1089,7 @@ Tutorial::~Tutorial() {
 	}
 }
 
-void Tutorial::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain) {
+void Render::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain) {
 	//[re]create framebuffers:
 	// clearn up existing framebuffers
 	if (swapchain_depth_image.handle != VK_NULL_HANDLE) {
@@ -1143,7 +1143,7 @@ void Tutorial::on_swapchain(RTG &rtg_, RTG::SwapchainEvent const &swapchain) {
 	}
 }
 
-void Tutorial::destroy_framebuffers() {
+void Render::destroy_framebuffers() {
 	for (VkFramebuffer& framebuffer : swapchain_framebuffers) {
 		assert(framebuffer != VK_NULL_HANDLE);
 		vkDestroyFramebuffer(rtg.device, framebuffer, nullptr);
@@ -1160,7 +1160,7 @@ void Tutorial::destroy_framebuffers() {
 }
 
 
-void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
+void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 	//assert that parameters are valid:
 	assert(&rtg == &rtg_);
 	assert(render_params.workspace_index < workspaces.size());
@@ -1543,7 +1543,7 @@ void Tutorial::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 }
 
 
-void Tutorial::update(float dt) {
+void Render::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
 	if(camera_mode == CameraMode::Scene)
@@ -1852,7 +1852,7 @@ void Tutorial::update(float dt) {
 }
 
 
-void Tutorial::on_input(InputEvent const &evt) {
+void Render::on_input(InputEvent const &evt) {
 	//if there is a current saction, it get input priority: 
 	if (action) {
 		action(evt);

@@ -5,11 +5,11 @@
 #include "mat4.hpp"
 #include "RTG.hpp"
 
-struct Tutorial : RTG::Application {
+struct Render : RTG::Application {
 
-	Tutorial(RTG &);
-	Tutorial(Tutorial const &) = delete; //you shouldn't be copying this object
-	~Tutorial();
+	Render(RTG &);
+	Render(Render const &) = delete; //you shouldn't be copying this object
+	~Render();
 
 	//kept for use in destructor:
 	RTG &rtg;
