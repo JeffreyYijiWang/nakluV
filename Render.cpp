@@ -1131,7 +1131,7 @@ void Render::update(float dt) {
 							.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
 							.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
 						},
-						.texture = 1,
+						.texture = texture_index,
 						});
 
 					transform_stack.pop_back();

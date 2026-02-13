@@ -38,6 +38,7 @@ void Scene::load(std::string const& filename)
         std::unordered_map<std::string, uint32_t> textures_map;
         std::unordered_map<std::string, uint32_t> cameras_map;
 
+        std::cout << "looked through header" << std::endl;
         for (int32_t i = 1; i < int32_t(object.size()); ++i)
         {
             auto object_i = object[i].as_object().value();
