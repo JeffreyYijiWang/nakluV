@@ -17,7 +17,7 @@ layout(location = 3) in vec2 TexCoord;
 
 layout (location = 0) out vec3 position;
 layout (location = 1) out vec3 normal;
-layout (location = 2) out vec2 tangent;
+layout (location = 2) out vec4 tangent;
 layout (location = 3) out vec2 texCoord;
 
 void main(){
