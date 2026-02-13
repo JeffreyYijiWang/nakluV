@@ -5,7 +5,7 @@
 #include <array> 
 #include <cmath>
 #include <cstdint>
-
+#include "glm.hpp"
 //Node: column -- mahor storage order (like OpenGL /GLSL):
 
 
@@ -171,4 +171,14 @@ inline mat4 orbit(
 	};
 
 
+}
+
+
+inline glm::mat4x4& to_glm_mat4(mat4& m) {
+	return *reinterpret_cast<glm::mat4x4*>(m.data());
+}
+
+// Treat a glm::mat4 as your mat4
+inline mat4& to_mat4(glm::mat4x4& gm) {
+	return *reinterpret_cast<mat4*>(&gm[0][0]);
 }

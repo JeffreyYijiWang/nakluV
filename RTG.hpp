@@ -2,7 +2,6 @@
 
 #include "Helpers.hpp"
 #include "InputEvent.hpp"
-
 #include <vulkan/vulkan_core.h>
 
 #include <array>
@@ -58,6 +57,11 @@ struct RTG {
 		// `--physical-device <name>` command-line flag
 		std::string physical_device_name = "";
 
+
+		//path.s72 format scene
+		// --scene <path>
+		std::string scene_path = "";
+
 		//requested (priority-ranked) formats for output surface: (will use first available)
 		std::vector< VkSurfaceFormatKHR > surface_formats{
 			VkSurfaceFormatKHR{ .format = VK_FORMAT_B8G8R8A8_SRGB, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
@@ -76,6 +80,9 @@ struct RTG {
 
 		//run without a window, read events from stdin:
 		bool headless = false;
+
+
+
 
 		//for configuration construction + management:
 		Configuration() = default;

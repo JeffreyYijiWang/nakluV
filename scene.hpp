@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VK.hpp"
-#include "GLM.hpp"
+#include "glm.hpp"
 #include <string>
 #include <vector>
 #include <optional>
@@ -20,9 +20,6 @@ struct Scene {
 
         glm::mat4x4 parent_from_local() const;  // graphics 362
         glm::mat4x4 local_from_parent() const;
-
-        // glm::mat4x4 world_from_local() const;
-        // glm::mat4x4 local_from_world() const;
     };
 
 
@@ -31,6 +28,12 @@ struct Scene {
         glm::vec3 value;
         bool is_2D = true;
         bool has_src = false;
+        /*enum Vkformat  optional format
+        {
+            Linear = 0,
+            SRGB= 1,
+            RGBE = 2,
+        } format = Linear;*/
 
         Texture(std::string source_) : source(source_), is_2D(true), has_src(true) {};
         Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false) {};

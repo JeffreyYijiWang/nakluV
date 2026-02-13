@@ -2,17 +2,23 @@
 
 #include "PosColVertex.hpp"
 #include "PosNorTexVertex.hpp"
+#include "PosNorTanTexVertex.hpp"
 #include "mat4.hpp"
 #include "RTG.hpp"
+#include "scene.hpp"
+#include "glm.hpp"
 
 struct Render : RTG::Application {
 
-	Render(RTG &);
+	Render(RTG &, Scene &);
 	Render(Render const &) = delete; //you shouldn't be copying this object
 	~Render();
 
 	//kept for use in destructor:
 	RTG &rtg;
+
+	//scene reference information
+	Scene& scene;
 
 	//--------------------------------------------------------------------
 	//Resources that last the lifetime of the application:
@@ -94,7 +100,7 @@ struct Render : RTG::Application {
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
-		using Vertex = PosNorTexVertex;
+		using Vertex = PosNorTanTexVertex;
 
 		VkPipeline handle = VK_NULL_HANDLE;
 
@@ -140,9 +146,8 @@ struct Render : RTG::Application {
 		uint32_t first = 0;
 		uint32_t count = 0;
 	};
-	ObjectVertices plane_vertices;
-	ObjectVertices torus_vertices;
-	ObjectVertices genus2_vertices;
+
+	std::vector<ObjectVertices> mesh_vertices;
 
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
@@ -175,6 +180,7 @@ struct Render : RTG::Application {
 	enum class CameraMode {
 		Scene = 0, 
 		Free = 1, 
+		Debug = 2
 	} camera_mode = CameraMode::Free;
 
 	//used when camera_mode  = CameraMode::Free: 

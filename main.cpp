@@ -1,6 +1,7 @@
 
 #include "RTG.hpp"
 
+#include "scene.hpp"
 #include "Render.hpp"
 
 #include <iostream>
@@ -36,12 +37,14 @@ int main(int argc, char **argv) {
 			});
 			return 1;
 		}
+		//loads .s72 scene and information
+		Scene scene(configuration.scene_path);
 
 		//loads vulkan library, creates surface, initializes helpers:
 		RTG rtg(configuration);
 
 		//initializes global (whole-life-of-application) resources:
-		Render application(rtg);
+		Render application(rtg, scene);
 
 		//main loop -- handles events, renders frames, etc:
 		rtg.run(application);

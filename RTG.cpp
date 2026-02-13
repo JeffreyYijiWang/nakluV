@@ -9,6 +9,7 @@
 #include <vulkan/vk_enum_string_helper.h> //useful for debug output
 #include <vulkan/utility/vk_format_utils.h> //for getting format sizes
 #include <GLFW/glfw3.h>
+#include "../Lib/stb/stb_image.h"
 
 #include <cassert>
 #include <chrono>
@@ -44,8 +45,14 @@ void RTG::Configuration::parse(int argc, char **argv) {
 				};
 			surface_extent.width = conv("width");
 			surface_extent.height = conv("height");
-		} else if (arg == "--headless") {
+		}
+		else if (arg == "--headless") {
 			headless = true;
+		}
+		else if (arg == "--scene") {
+			if (argi + 1 >= argc) throw std::runtime_error("--scene requires a .s72 file (a filename name).");
+			argi += 1;
+			scene_path = argv[argi];
 		} else {
 			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
 		}
@@ -57,6 +64,7 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--physical-device <name>", "Run on the named physical device (guesses, otherwise).");
 	callback("--drawing-size <w> <h>", "Set the size of the surface to draw to.");
 	callback("--headless", "Don't create a window; read events from stdin.");
+	callback("--scene <path>", "Read the scene file with .s72 format");
 }
 
 

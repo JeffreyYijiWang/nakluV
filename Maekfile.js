@@ -34,7 +34,8 @@ const main_objs = [
 	maek.CPP('RTG.cpp'),
 	maek.CPP('Helpers.cpp'),
 	maek.CPP('main.cpp'),
-	//maek.CPP('scene.cpp'),
+	maek.CPP('data_path.cpp'),
+	maek.CPP('scene.cpp'),
 	maek.CPP('../Lib/sejp.cpp'),
 ];
 
