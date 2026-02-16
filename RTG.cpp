@@ -69,6 +69,7 @@ void RTG::Configuration::parse(int argc, char **argv) {
 			}
 			else {
 				throw std::runtime_error("--culling only takes none or frustum as parameters");
+			}
 		}
 		else if (arg == "--animation") {
 			argi += 1;
@@ -88,7 +89,7 @@ void RTG::Configuration::parse(int argc, char **argv) {
 			else {
 				throw std::runtime_error("--animation only takes loop, play-once, or paused as parameters");
 			}
-	
+		}
 		else {
 			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
 		}
