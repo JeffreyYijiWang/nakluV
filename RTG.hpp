@@ -83,6 +83,9 @@ struct RTG {
 		//scene camera
 		std::optional<std::string> scene_camera;
 
+		// culling settings
+		uint8_t culling_settings = 1; // 0 no culling, 1 frustum culling
+
 
 		//for configuration construction + management:
 		Configuration() = default;

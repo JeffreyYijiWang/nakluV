@@ -6,6 +6,7 @@
 #include "mat4.hpp"
 #include "RTG.hpp"
 #include "scene.hpp"
+#include "frustum_culling.hpp"
 #include "glm.hpp"
 
 struct Render : RTG::Application {
@@ -148,6 +149,7 @@ struct Render : RTG::Application {
 	};
 
 	std::vector<ObjectVertices> mesh_vertices;
+	std::vector<AABB> mesh_AABBs;
 
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
@@ -171,6 +173,7 @@ struct Render : RTG::Application {
 
 	virtual void update(float dt) override;
 	virtual void on_input(InputEvent const &) override;
+	
 
 	//modal action, intercepts inputs:
 	std::function< void(InputEvent const&)> action;
@@ -184,7 +187,7 @@ struct Render : RTG::Application {
 		Debug = 2
 	} camera_mode = CameraMode::Scene;
 
-	CameraMode culling_camera = CameraMode::Scene;
+	virtual void update_free_camera(OrbitCamera& camc, CameraMode type);
 
 	//used when camera_mode  = CameraMode::Free: 
 	struct OrbitCamera {
@@ -200,12 +203,15 @@ struct Render : RTG::Application {
 	//computer dd form the current camera (as set by camera_mode) during ujpdate()
 	mat4 CLIP_FROM_WORLD;
 
-	//CullingFrustum scene_cam_frustum, user_cam_frustum;
+	CameraMode culling_camera = CameraMode::Scene;
 
-	std::array<glm::mat4x4, 3> clip_from_view;
-	std::array<glm::mat4x4, 3> view_from_world;
+	CullingFrustum scene_cam_frustum, user_cam_frustum;
+
+	//store for scene, user, and debug cameras
+	std::array<glm::mat4x4, 3> clip_from_view; // Perspective matrix
+	std::array<glm::mat4x4, 3> view_from_world; //view matrix 
 	 
-	virtual void update_free_camera(OrbitCamera& camc, CameraMode type);
+	
 
 	std::vector < LinesPipeline::Vertex > lines_vertices;
 

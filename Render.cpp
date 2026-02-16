@@ -271,6 +271,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 		uint32_t new_vertices_start = 0;
 		size_t mesh_count = scene.meshes.size();
 		mesh_vertices.assign(mesh_count, ObjectVertices());
+		mesh_AABBs.assign(scene.meshes.size(), AABB());
 
 		//create meshes 
 		for (uint32_t i = 0; i < uint32_t(mesh_count); ++i)
@@ -286,6 +287,13 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 			if (!file.read(reinterpret_cast<char*>(&vertices[new_vertices_start]), cur_mesh.count * sizeof(PosNorTanTexVertex)))
 			{
 				throw std::runtime_error("Failed to read mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
+			}
+
+			//find OOB and create mesh ABBS
+			for (size_t vertex_i = mesh_vertices[i].first; vertex_i < (mesh_vertices[i].first + mesh_vertices[i].count); ++vertex_i) {
+				glm::vec3 cur_vert_pos = { vertices[vertex_i].Position.x, vertices[vertex_i].Position.y, vertices[vertex_i].Position.z };
+				mesh_AABBs[i].min = glm::min(mesh_AABBs[i].min, cur_vert_pos);
+				mesh_AABBs[i].max = glm::max(mesh_AABBs[i].max, cur_vert_pos);
 			}
 			new_vertices_start += cur_mesh.count;
 		}
@@ -508,6 +516,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 			CLIP_FROM_WORLD = to_mat4(clip);
 
 			camera_mode = CameraMode::Free;
+			culling_camera = CameraMode::Free;
 		}
 		else
 		{
@@ -546,13 +555,29 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 				1000.0f															// far
 			).data());
 
+			scene_cam_frustum = make_frustum(
+				cur_camera.vfov,   // vfov
+				cur_camera.aspect, // aspect
+				cur_camera.near,   // near
+				cur_camera.far	   // far
+			);
+
 			clip_from_view[2] = clip_from_view[1];
 
 			glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
 			CLIP_FROM_WORLD = to_mat4(clip);
 
 			camera_mode = CameraMode::Scene;
+			culling_camera = CameraMode::Scene;
+			
 		}
+
+		user_cam_frustum = make_frustum(
+			60.0f * float(M_PI) / 180.0f,									 // vfov
+			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+			0.1f,															 // near
+			1000.0f															 // far
+		);
 	}
 }
 
@@ -1005,34 +1030,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		//	}
 		//	vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		//}
-		if (!lines_vertices.empty())
-		{//draw with the lines pipeline;
-			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
-
-			{//use lines_vertice (offset 0) as vertex buffer bindign 0:
-				std::array < VkBuffer, 1> vertex_buffers{ workspace.lines_vertices.handle };
-				std::array <VkDeviceSize, 1> offsets{ 0 };
-				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
-			}
-
-			{//bind teh camera descript set:
-				std::array < VkDescriptorSet, 1> descriptor_sets{
-					workspace.Camera_descriptors, // 0. camera
-				};
-				vkCmdBindDescriptorSets(
-					workspace.command_buffer, //command_buffer
-					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
-					lines_pipeline.layout, //pipline layout 
-					0, // first set 
-					uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
-					0, nullptr // dynamics offsets count, ptr
-				);
-
-			}
-
-			//draw line vertice
-			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
-		}
+		
 
 		if(!object_instances.empty())
 		{//draw with the object pipeline:
@@ -1089,6 +1087,34 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			}
 		}
 
+		if (!lines_vertices.empty())
+		{//draw with the lines pipeline;
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
+
+			{//use lines_vertice (offset 0) as vertex buffer bindign 0:
+				std::array < VkBuffer, 1> vertex_buffers{ workspace.lines_vertices.handle };
+				std::array <VkDeviceSize, 1> offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
+
+			{//bind teh camera descript set:
+				std::array < VkDescriptorSet, 1> descriptor_sets{
+					workspace.Camera_descriptors, // 0. camera
+				};
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer, //command_buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+					lines_pipeline.layout, //pipline layout 
+					0, // first set 
+					uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
+					0, nullptr // dynamics offsets count, ptr
+				);
+
+			}
+
+			//draw line vertice
+			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
+		}
 
 		
 		vkCmdEndRenderPass(workspace.command_buffer);
@@ -1130,7 +1156,85 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 void Render::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
-	if (camera_mode == CameraMode::Scene)
+	{//static sun and sky 
+		bool sun_defined = false;
+		bool sky_defined = false;
+		glm::vec3 default_directional_light_dir = { 0.0f, 0.0f, 1.0f };
+		for (const Scene::Light& light : scene.lights) {
+			glm::mat4x4 cur_light_transform = scene.nodes[light.local_to_world[0]].transform.local_to_parent();
+			for (int i = 1; i < light.local_to_world.size(); ++i) {
+				cur_light_transform *= scene.nodes[light.local_to_world[i]].transform.local_to_parent();
+			}
+			glm::mat3 rotation_matrix = glm::mat3(cur_light_transform);
+			rotation_matrix[0] = glm::normalize(rotation_matrix[0]);
+			rotation_matrix[1] = glm::normalize(rotation_matrix[1]);
+			rotation_matrix[2] = glm::normalize(rotation_matrix[2]);
+			glm::vec3 new_direction = rotation_matrix * default_directional_light_dir;
+
+			if (abs(light.angle - 0.0f) < 0.001f) {
+				sun_defined = true;
+				glm::vec3 energy = light.strength * light.tint;
+				world.SUN_ENERGY.r = energy.r;
+				world.SUN_ENERGY.g = energy.g;
+				world.SUN_ENERGY.b = energy.b;
+				world.SUN_DIRECTION.x = new_direction.x;
+				world.SUN_DIRECTION.y = new_direction.y;
+				world.SUN_DIRECTION.z = new_direction.z;
+			}
+			else if (abs(light.angle - float(M_PI)) < 0.001f) {
+				sky_defined = true;
+				glm::vec3 energy = light.strength * light.tint;
+				world.SKY_ENERGY.r = energy.r;
+				world.SKY_ENERGY.g = energy.g;
+				world.SKY_ENERGY.b = energy.b;
+				world.SKY_DIRECTION.x = new_direction.x;
+				world.SKY_DIRECTION.y = new_direction.y;
+				world.SKY_DIRECTION.z = new_direction.z;
+			}
+		}
+		if (!sky_defined && !sun_defined) {
+			world.SKY_ENERGY.r = .1f;
+			world.SKY_ENERGY.g = .1f;
+			world.SKY_ENERGY.b = .2f;
+
+			world.SUN_ENERGY.r = 1.0f;
+			world.SUN_ENERGY.g = 1.0f;
+			world.SUN_ENERGY.b = 0.9f;
+
+			world.SKY_DIRECTION.x = 0.0f;
+			world.SKY_DIRECTION.y = 0.0f;
+			world.SKY_DIRECTION.z = 1.0f;
+
+			world.SUN_DIRECTION.x = 0.0f;
+			world.SUN_DIRECTION.y = 0.0f;
+			world.SUN_DIRECTION.z = 1.0f;
+
+		}
+		else if (!sky_defined) {
+			world.SKY_ENERGY.r = 0.0f;
+			world.SKY_ENERGY.g = 0.0f;
+			world.SKY_ENERGY.b = 0.0f;
+			world.SKY_DIRECTION.x = 0.0f;
+			world.SKY_DIRECTION.y = 0.0f;
+			world.SKY_DIRECTION.z = 1.0f;
+		}
+		else if (!sun_defined) {
+			world.SUN_ENERGY.r = 0.0f;
+			world.SUN_ENERGY.g = 0.0f;
+			world.SUN_ENERGY.b = 0.0f;
+			world.SUN_DIRECTION.x = 0.0f;
+			world.SUN_DIRECTION.y = 0.0f;
+			world.SUN_DIRECTION.z = 1.0f;
+		}
+		float length = sqrt(world.SUN_DIRECTION.x * world.SUN_DIRECTION.x + world.SUN_DIRECTION.y * world.SUN_DIRECTION.y + world.SUN_DIRECTION.z * world.SUN_DIRECTION.z);
+		world.SKY_DIRECTION.x /= length;
+		world.SKY_DIRECTION.y /= length;
+		world.SKY_DIRECTION.z /= length;
+
+
+	}
+	//camera modes
+	if (camera_mode == CameraMode::Scene || culling_camera == CameraMode::Scene)
 	{
 		Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
 		glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.local_to_parent();
@@ -1157,128 +1261,246 @@ void Render::update(float dt) {
 			cur_camera.far	  // far
 		).data());
 
-		glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
-		CLIP_FROM_WORLD = to_mat4(clip);
-	}
-	else if (camera_mode == CameraMode::Free) {
-		CLIP_FROM_WORLD = perspective(
-			user_camera.fov,
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
-			user_camera.near,
-			user_camera.far
-		) * orbit(
-			user_camera.target_x, user_camera.target_y, user_camera.target_z,
-			user_camera.azimuth, user_camera.elevation, user_camera.radius
+		scene_cam_frustum = make_frustum(
+			cur_camera.vfov,   // vfov
+			cur_camera.aspect, // aspect
+			cur_camera.near,   // near
+			cur_camera.far	   // far
 		);
 
-		clip_from_view[1] = glm::make_mat4(perspective(
-			60.0f * float(M_PI) / 180.0f,									// vfov
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-			0.1f,															// near
-			1000.0f															// far
-		)
-			.data());
-
-		view_from_world[1] = glm::make_mat4(orbit(
-			user_camera.target_x, user_camera.target_y, user_camera.target_z,
-			user_camera.azimuth, user_camera.elevation, user_camera.radius
-		)
-			.data());
+		if (camera_mode == CameraMode::Scene) {
+			glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
+			CLIP_FROM_WORLD = to_mat4(clip);
+		}
 	}
-	else if (camera_mode == CameraMode::Debug) {
-		CLIP_FROM_WORLD = perspective(
-			debug_camera.fov,
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
-			debug_camera.near,
-			debug_camera.far
-		) * orbit(
-			debug_camera.target_x, debug_camera.target_y, debug_camera.target_z,
-			debug_camera.azimuth, debug_camera.elevation, debug_camera.radius
-		);
+	if (camera_mode != CameraMode::Scene) {
+	/*	static float last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
 
-		clip_from_view[2] = glm::make_mat4(perspective(
-			60.0f * float(M_PI) / 180.0f,									// vfov
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-			0.1f,															// near
-			1000.0f															// far
-		)
-			.data());
+		if (last_aspect != float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height)) {*/
+			if (camera_mode == CameraMode::Free) {
+				CLIP_FROM_WORLD = perspective(
+					user_camera.fov,
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
+					user_camera.near,
+					user_camera.far
+				) * orbit(
+					user_camera.target_x, user_camera.target_y, user_camera.target_z,
+					user_camera.azimuth, user_camera.elevation, user_camera.radius
+				);
 
-		view_from_world[2] = glm::make_mat4(orbit(
-			debug_camera.target_x, debug_camera.target_y, debug_camera.target_z,
-			debug_camera.azimuth, debug_camera.elevation, debug_camera.radius
-		)
-			.data());
+				clip_from_view[1] = glm::make_mat4(perspective(
+					60.0f * float(M_PI) / 180.0f,									// vfov
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+					0.1f,															// near
+					1000.0f															// far
+				)
+					.data());
+
+				user_cam_frustum = make_frustum(
+					60.0f * float(M_PI) / 180.0f,									 // vfov
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+					0.1f,															 // near
+					1000.0f															 // far
+				);
+
+				view_from_world[1] = glm::make_mat4(orbit(
+					user_camera.target_x, user_camera.target_y, user_camera.target_z,
+					user_camera.azimuth, user_camera.elevation, user_camera.radius
+				)
+					.data());
+			}
+			else if (camera_mode == CameraMode::Debug) {
+				CLIP_FROM_WORLD = perspective(
+					debug_camera.fov,
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
+					debug_camera.near,
+					debug_camera.far
+				) * orbit(
+					debug_camera.target_x, debug_camera.target_y, debug_camera.target_z,
+					debug_camera.azimuth, debug_camera.elevation, debug_camera.radius
+				);
+
+				clip_from_view[2] = glm::make_mat4(perspective(
+					60.0f * float(M_PI) / 180.0f,									// vfov
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+					0.1f,															// near
+					1000.0f															// far
+				)
+					.data());
+
+				view_from_world[2] = glm::make_mat4(orbit(
+					debug_camera.target_x, debug_camera.target_y, debug_camera.target_z,
+					debug_camera.azimuth, debug_camera.elevation, debug_camera.radius
+				)
+					.data());
+
+				user_cam_frustum = make_frustum(
+					60.0f * float(M_PI) / 180.0f,									 // vfov
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+					0.1f,															 // near
+					1000.0f															 // far
+				);
+			}
+		/*	last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
+		}*/
 	}
-	else {
-		assert(0 && "only three camera modes");
+
+	//updating frustrum
+	lines_vertices.clear();
+	std::array<glm::vec3, 8> frustum_vertices;
+
+	if (rtg.configuration.culling_settings == 1)
+	{ // frustum culling is on
+		glm::mat4x4 world_from_clip = glm::inverse(culling_camera == CameraMode::Scene ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
+		std::array<glm::vec4, 8> clip_space_coordinates = {
+			glm::vec4(1.0f, 1.0f, 0.0f, 1.0f),	 // Near top right
+			glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f),	 // Near top left
+			glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),	 // Near bottom right
+			glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f), // Near bottom left
+			glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),	 // Far top right
+			glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),	 // Far top left
+			glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),	 // Far bottom right
+			glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)	 // Far bottom left
+		};
+		// Transform clip space to world space and apply perspective divide
+		for (int j = 0; j < 8; ++j)
+		{
+			glm::vec4 world_space_vertex = world_from_clip * clip_space_coordinates[j];
+			frustum_vertices[j] = glm::vec3(world_space_vertex) / world_space_vertex.w;
+		}
 	}
+	 // render last active frustum if in debug mode
+	{
+		if (camera_mode == CameraMode::Debug)
+		{
+			if (rtg.configuration.culling_settings != 1)
+			{
+				glm::mat4x4 world_from_clip = glm::inverse(culling_camera == CameraMode::Scene ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
+				std::array<glm::vec4, 8> clip_space_coordinates = {
+					glm::vec4(1.0f, 1.0f, 0.0f, 1.0f),	 // Near top right
+					glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f),	 // Near top left
+					glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),	 // Near bottom right
+					glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f), // Near bottom left
+					glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),	 // Far top right
+					glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),	 // Far top left
+					glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),	 // Far bottom right
+					glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)	 // Far bottom left
+				};
+				// Transform clip space to world space and apply perspective divide
+				for (int j = 0; j < 8; ++j)
+				{
+					glm::vec4 world_space_vertex = world_from_clip * clip_space_coordinates[j];
+					frustum_vertices[j] = glm::vec3(world_space_vertex) / world_space_vertex.w;
+				}
+			}
 
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[0].x, .y = frustum_vertices[0].y, .z = frustum_vertices[0].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[1].x, .y = frustum_vertices[1].y, .z = frustum_vertices[1].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[0].x, .y = frustum_vertices[0].y, .z = frustum_vertices[0].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[2].x, .y = frustum_vertices[2].y, .z = frustum_vertices[2].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[2].x, .y = frustum_vertices[2].y, .z = frustum_vertices[2].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[3].x, .y = frustum_vertices[3].y, .z = frustum_vertices[3].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[3].x, .y = frustum_vertices[3].y, .z = frustum_vertices[3].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[1].x, .y = frustum_vertices[1].y, .z = frustum_vertices[1].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[0].x, .y = frustum_vertices[0].y, .z = frustum_vertices[0].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[4].x, .y = frustum_vertices[4].y, .z = frustum_vertices[4].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[4].x, .y = frustum_vertices[4].y, .z = frustum_vertices[4].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[6].x, .y = frustum_vertices[6].y, .z = frustum_vertices[6].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[2].x, .y = frustum_vertices[2].y, .z = frustum_vertices[2].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[6].x, .y = frustum_vertices[6].y, .z = frustum_vertices[6].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[4].x, .y = frustum_vertices[4].y, .z = frustum_vertices[4].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[5].x, .y = frustum_vertices[5].y, .z = frustum_vertices[5].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[6].x, .y = frustum_vertices[6].y, .z = frustum_vertices[6].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[7].x, .y = frustum_vertices[7].y, .z = frustum_vertices[7].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[1].x, .y = frustum_vertices[1].y, .z = frustum_vertices[1].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[5].x, .y = frustum_vertices[5].y, .z = frustum_vertices[5].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[3].x, .y = frustum_vertices[3].y, .z = frustum_vertices[3].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[7].x, .y = frustum_vertices[7].y, .z = frustum_vertices[7].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[5].x, .y = frustum_vertices[5].y, .z = frustum_vertices[5].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
+			lines_vertices.emplace_back(PosColVertex{
+				.Position{.x = frustum_vertices[7].x, .y = frustum_vertices[7].y, .z = frustum_vertices[7].z},
+				.Color{.r = 0xe0, .g = 0xff, .b = 0xff, .a = 0xff},
+				});
 
-		
-		//
-
-		//if (last_aspect != float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height))
-		//{
-		//	clip_from_view[1] = glm::make_mat4(perspective(
-		//		60.0f * float(M_PI) / 180.0f,									// vfov
-		//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-		//		0.1f,															// near
-		//		1000.0f															// far
-		//	)
-		//		.data());
-
-		//	clip_from_view[2] = clip_from_view[1];
-
-
-		//	OrbitCamera& cam = debug_camera;
-		//	update_free_camera(cam, CameraMode::Debug);
-		//	last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
-		//}
+		}
+	}
 
 	
-		//static float last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
-
-		//if (last_aspect != float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height))
-		//{
-		//	clip_from_view[1] = glm::make_mat4(perspective(
-		//		60.0f * float(M_PI) / 180.0f,									// vfov
-		//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-		//		0.1f,															// near
-		//		1000.0f															// far
-		//	)
-		//		.data());
-
-		//	clip_from_view[2] = clip_from_view[1];
-
-
-		//	OrbitCamera& cam = debug_camera;
-		//	update_free_camera(cam, CameraMode::Debug);
-		//	last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
-		//}
-	
-
-	{//static sun and sky 
-		world.SKY_DIRECTION.x = 0.0f;
-		world.SKY_DIRECTION.y = 0.0f;
-		world.SKY_DIRECTION.z = 1.0f;
-
-		world.SKY_ENERGY.r = 0.1f;
-		world.SKY_ENERGY.g = 0.1f;
-		world.SKY_ENERGY.b = 0.2f;
-
-		world.SUN_DIRECTION.x = 6.0f / 23.0f; 
-		world.SUN_DIRECTION.y = 13.0f / 23.0f; 
-		world.SUN_DIRECTION.x = 18.0f / 23.0f;
-
-		world.SUN_ENERGY.r = 1.0f;
-		world.SUN_ENERGY.g = 1.0f;
-		world.SUN_ENERGY.b = 0.9f;
-
-	}
 	
 	{ // fill object instances with scene hiearchy
 		object_instances.clear();
+
+		glm::mat4x4 frustum_view_from_world = culling_camera == CameraMode::Scene ? view_from_world[0] : view_from_world[1];
+
 
 		std::deque<glm::mat4x4> transform_stack;
 
@@ -1307,7 +1529,129 @@ void Render::update(float dt) {
 				if (int32_t cur_mesh_index = cur_node.mesh_index; cur_mesh_index != -1)
 				{
 					mat4 WORLD_FROM_LOCAL = to_mat4(transform_stack.back());
+					glm::mat4x4 glm_world = transform_stack.back();
+					glm::mat4x4 glm_world_normal = glm::mat4x4(glm::inverse(glm::transpose(glm::mat3(glm_world))));
+					mat4 WORLD_FROM_LOCAL_NORMAL = to_mat4(glm_world_normal);
+					OBB obb = AABB_transform_to_OBB(glm_world, mesh_AABBs[cur_mesh_index]);
+					if (camera_mode == CameraMode::Debug) {
+						//debug draw the OBBs
 
+						std::array<glm::vec3, 8> vertices = {
+							obb.center + obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+							obb.center + obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2],
+							obb.center + obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+							obb.center + obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2],
+							obb.center - obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+							obb.center - obb.extents[0] * obb.axes[0] + obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2],
+							obb.center - obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] + obb.extents[2] * obb.axes[2],
+							obb.center - obb.extents[0] * obb.axes[0] - obb.extents[1] * obb.axes[1] - obb.extents[2] * obb.axes[2]
+						};
+
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[0].x, .y = vertices[0].y, .z = vertices[0].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[1].x, .y = vertices[1].y, .z = vertices[1].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[0].x, .y = vertices[0].y, .z = vertices[0].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[2].x, .y = vertices[2].y, .z = vertices[2].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[2].x, .y = vertices[2].y, .z = vertices[2].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[3].x, .y = vertices[3].y, .z = vertices[3].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[3].x, .y = vertices[3].y, .z = vertices[3].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[1].x, .y = vertices[1].y, .z = vertices[1].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[0].x, .y = vertices[0].y, .z = vertices[0].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[4].x, .y = vertices[4].y, .z = vertices[4].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[4].x, .y = vertices[4].y, .z = vertices[4].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[6].x, .y = vertices[6].y, .z = vertices[6].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[2].x, .y = vertices[2].y, .z = vertices[2].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[6].x, .y = vertices[6].y, .z = vertices[6].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[4].x, .y = vertices[4].y, .z = vertices[4].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+					.Position{.x = vertices[5].x, .y = vertices[5].y, .z = vertices[5].z},
+						.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[6].x, .y = vertices[6].y, .z = vertices[6].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[7].x, .y = vertices[7].y, .z = vertices[7].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[1].x, .y = vertices[1].y, .z = vertices[1].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[5].x, .y = vertices[5].y, .z = vertices[5].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[3].x, .y = vertices[3].y, .z = vertices[3].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[7].x, .y = vertices[7].y, .z = vertices[7].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[5].x, .y = vertices[5].y, .z = vertices[5].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+						lines_vertices.emplace_back(PosColVertex{
+							.Position{.x = vertices[7].x, .y = vertices[7].y, .z = vertices[7].z},
+							.Color{.r = 0xff, .g = 0x00, .b = 0x00, .a = 0xff},
+							});
+
+
+						if (rtg.configuration.culling_settings == 1 && !check_frustum_obb_intersection(frustum_vertices, obb))
+						{
+							transform_stack.pop_back();
+							return;
+						}
+					}
+						
 					uint32_t texture_index = 0;
 					if (scene.meshes[cur_mesh_index].material_index != -1)
 					{
@@ -1357,6 +1701,9 @@ void Render::on_input(InputEvent const &evt) {
 			camera_mode =  CameraMode((int(camera_mode) + 1) % 3);
 			std::cerr << "There are no scene camera in the scene, switching to user\n";
 		}
+		if (int(camera_mode) < 2) {
+			culling_camera = camera_mode;
+		}
 		//update_free_camera(free_camera, camera_mode)
 		return;
 	}
@@ -1373,15 +1720,16 @@ void Render::on_input(InputEvent const &evt) {
 			else
 			{
 				camera_mode = CameraMode::Scene;
+				culling_camera = CameraMode::Scene;
 				std::cout << "scene MODE" << std::endl;
-				//culling_camera = CameraMode::Scene;
+				
 			}
 			return;
 		}
 		else if (evt.key.key == GLFW_KEY_2)
 		{
 			camera_mode = CameraMode::Free;
-			/*culling_camera = CameraMode::Free;*/
+			culling_camera = CameraMode::Free;
 			std::cout << "user MODE" << std::endl;
 
 		}
@@ -1471,7 +1819,7 @@ void Render::on_input(InputEvent const &evt) {
 				/*	update_free_camera(free_camera, camera_mode);*/
 					return;
 				}
-				};
+			};
 			return;
 		}
 		else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {

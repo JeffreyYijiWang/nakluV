@@ -37,6 +37,7 @@ const main_objs = [
 	maek.CPP('data_path.cpp'),
 	maek.CPP('scene.cpp'),
 	maek.CPP('../Lib/sejp.cpp'),
+	maek.CPP('frustum_culling.cpp'),
 ];
 
 //maek.GLSLC(...) builds a glsl source file:
