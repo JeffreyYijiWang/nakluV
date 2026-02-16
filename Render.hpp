@@ -198,7 +198,7 @@ struct Render : RTG::Application {
 		float fov = 60.0f / 180.0f * float(M_PI); //vertical field of view (radians)
 		float near = 0.1f; // near clippingplan 
 		float far = 1000.0f; // far clipping plane
-	} user_camera, debug_camera;
+	} user_camera, debug_camera, scene_camera;
 
 	//computer dd form the current camera (as set by camera_mode) during ujpdate()
 	mat4 CLIP_FROM_WORLD;
@@ -224,6 +224,10 @@ struct Render : RTG::Application {
 	};
 
 	std::vector < ObjectInstance > object_instances;
+
+	//-------------------------------------
+	void set_animation_time(float t);
+
 	//--------------------------------------------------------------------
 	//Rendering function, uses all the resources above to queue work to draw a frame:
 

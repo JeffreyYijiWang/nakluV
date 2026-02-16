@@ -126,10 +126,12 @@ struct Scene {
     std::string scene_path;
     std::vector<Driver> drivers;
     uint8_t animation_setting;
+    float return_time = 0.0f;
 
     // Functions
-    Scene(std::string filename, std::optional<std::string> camera);
+    Scene(std::string filename, std::optional<std::string> camera, uint8_t animation_setting);
     void load(std::string filename, std::optional<std::string> camera);
     void debug();
-
+    void update_drivers(float dt);
+    void set_driver_time(float t);
 };

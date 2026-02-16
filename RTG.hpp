@@ -86,6 +86,9 @@ struct RTG {
 		// culling settings
 		uint8_t culling_settings = 1; // 0 no culling, 1 frustum culling
 
+		//animtion settings
+		uint8_t animation_settings = 0; // 0 play once, 1 loop, 2 paused
+		uint8_t past_animation_settings = 0; // 0 play once, 1 loop, 2 paused
 
 		//for configuration construction + management:
 		Configuration() = default;

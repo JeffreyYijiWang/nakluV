@@ -7,7 +7,8 @@
 #include <optional>
 #include <unordered_map>
 
-Scene::Scene(std::string filename, std::optional<std::string> camera)
+Scene::Scene(std::string filename, std::optional<std::string> camera, uint8_t animation_setting_)
+    :animation_setting(animation_setting_)
 {
     load(data_path(filename), camera);
 }
@@ -872,15 +873,214 @@ void Scene::debug()
     }
 }
 
+
+void Scene::update_drivers(float dt)
+{
+    if (animation_setting == 2) return;
+    for (Scene::Driver& driver : drivers) {
+        if (animation_setting == 2) {
+            std::cout << "driver time: " << driver.cur_time << std::endl;
+            return_time = driver.cur_time;
+            return; 
+        }
+        else {
+            if (driver.cur_time_index == driver.times.size()) continue;
+            driver.cur_time += dt;
+        }
+        auto found_it = std::upper_bound(driver.times.begin() + driver.cur_time_index, driver.times.end(), driver.cur_time);
+
+        //extrapolate constant value at the beginning
+        if (found_it == driver.times.begin()) {
+            if (driver.channel == Driver::Channel::Rotation) {
+                uint32_t cur_value_index = driver.cur_time_index * 4;
+                nodes[driver.node_index].transform.rotation = glm::quat(
+                    driver.values[cur_value_index + 3],
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            else if (driver.channel == Driver::Channel::Translation) {
+                uint32_t cur_value_index = driver.cur_time_index * 3;
+                nodes[driver.node_index].transform.position = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            else if (driver.channel == Driver::Channel::Scale) {
+                uint32_t cur_value_index = driver.cur_time_index * 3;
+                nodes[driver.node_index].transform.scale = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            continue;
+        }
+        // extrapolate constant value at the end
+        if (found_it == driver.times.end()) {
+            driver.cur_time_index = uint32_t(driver.times.size() - 1);
+            if (driver.channel == Driver::Channel::Rotation) {
+                uint32_t cur_value_index = driver.cur_time_index * 4;
+                nodes[driver.node_index].transform.rotation = glm::quat(
+                    driver.values[cur_value_index + 3],
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            else if (driver.channel == Driver::Channel::Translation) {
+                uint32_t cur_value_index = driver.cur_time_index * 3;
+                nodes[driver.node_index].transform.position = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            else if (driver.channel == Driver::Channel::Scale) {
+                uint32_t cur_value_index = driver.cur_time_index * 3;
+                nodes[driver.node_index].transform.scale = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            // reset animation to start again
+            if (animation_setting == 1) {
+                driver.cur_time_index = 0;
+                driver.cur_time = 0.0f;
+            }
+            continue;
+        }
+        // time should be between cur_time_index and cur_time_index + 1
+        driver.cur_time_index = uint32_t(found_it - driver.times.begin() - 1);
+        switch (driver.interpolation) {
+        case Driver::InterpolationMode::STEP: {
+            if (driver.channel == Driver::Channel::Rotation) {
+                uint32_t cur_value_index = driver.cur_time_index * 4;
+                nodes[driver.node_index].transform.rotation = glm::quat(
+                    driver.values[cur_value_index + 3],
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            else if (driver.channel == Driver::Channel::Translation) {
+                uint32_t cur_value_index = driver.cur_time_index * 3;
+                nodes[driver.node_index].transform.position = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+            else if (driver.channel == Driver::Channel::Scale) {
+                uint32_t cur_value_index = driver.cur_time_index * 3;
+                nodes[driver.node_index].transform.scale = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+            }
+        }
+                                            break;
+        case Driver::InterpolationMode::LINEAR: {
+            float interval = driver.times[driver.cur_time_index + 1] - driver.times[driver.cur_time_index];
+            float t = (driver.cur_time - driver.times[driver.cur_time_index]) / interval;
+            if (driver.channel == Driver::Channel::Rotation) {
+                uint32_t n = 4;
+                uint32_t cur_value_index = driver.cur_time_index * n;
+                nodes[driver.node_index].transform.rotation = glm::quat(
+                    driver.values[cur_value_index + 3],
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                ) * (1.0f - t) + glm::quat(
+                    driver.values[cur_value_index + n + 3],
+                    driver.values[cur_value_index + n],
+                    driver.values[cur_value_index + n + 1],
+                    driver.values[cur_value_index + n + 2]
+                ) * t;
+            }
+            else if (driver.channel == Driver::Channel::Translation) {
+                uint32_t n = 3;
+                uint32_t cur_value_index = driver.cur_time_index * n;
+                nodes[driver.node_index].transform.position = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                ) * (1.0f - t) + glm::vec3(
+                    driver.values[cur_value_index + n],
+                    driver.values[cur_value_index + n + 1],
+                    driver.values[cur_value_index + n + 2]
+                ) * t;
+            }
+            else if (driver.channel == Driver::Channel::Scale) {
+                uint32_t n = 3;
+                uint32_t cur_value_index = driver.cur_time_index * n;
+                nodes[driver.node_index].transform.scale = glm::vec3(
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                ) * (1.0f - t) + glm::vec3(
+                    driver.values[cur_value_index + n],
+                    driver.values[cur_value_index + n + 1],
+                    driver.values[cur_value_index + n + 2]
+                ) * t;
+            }
+        }
+                                              break;
+        case Driver::InterpolationMode::SLERP: {
+            if (driver.channel == Driver::Channel::Rotation) {
+                float interval_slerp = driver.times[driver.cur_time_index + 1] - driver.times[driver.cur_time_index];
+                float t_slerp = (driver.cur_time - driver.times[driver.cur_time_index]) / interval_slerp;
+
+                // Retrieve the quaternions at the current and next time indices
+                uint32_t n = 4;
+                uint32_t cur_value_index = driver.cur_time_index * n;
+
+                glm::quat q1 = glm::quat(
+                    driver.values[cur_value_index + 3],
+                    driver.values[cur_value_index],
+                    driver.values[cur_value_index + 1],
+                    driver.values[cur_value_index + 2]
+                );
+
+                glm::quat q2 = glm::quat(
+                    driver.values[cur_value_index + n + 3],
+                    driver.values[cur_value_index + n],
+                    driver.values[cur_value_index + n + 1],
+                    driver.values[cur_value_index + n + 2]
+                );
+
+                // Perform SLERP between q1 and q2 based on t
+                nodes[driver.node_index].transform.rotation = glm::slerp(q1, q2, t_slerp);
+            }
+            else if (driver.channel == Driver::Channel::Translation) {
+                throw std::runtime_error("Shouldn't call SLERP on translation");
+            }
+            else {
+                throw std::runtime_error("Shouldn't call SLERP on scale");
+            }
+        }
+            break;
+        }
+
+    }
+}
+
+void Scene::set_driver_time(float t)
+{
+    for (Scene::Driver& driver : drivers) {
+        driver.cur_time_index = 0;
+        driver.cur_time = t;
+    }
+    update_drivers(t);
+}
+
+
 glm::mat4x4 Scene::Transform::local_to_parent() const
 {
-    // compute:
-    //    translate   *   rotate    *   scale
-    //  [ 1 0 0 p.x ]   [       0 ]   [ s.x 0 0 0 ]
-    //  [ 0 1 0 p.y ] * [ rot   0 ] * [ 0 s.y 0 0 ]
-    //  [ 0 0 1 p.z ]   [       0 ]   [ 0 0 s.z 0 ]
-    //                  [ 0 0 0 1 ]   [ 0 0   0 1 ]
-
     glm::mat3 rot = glm::mat3_cast(rotation);
 
     return glm::mat4(
@@ -893,13 +1093,6 @@ glm::mat4x4 Scene::Transform::local_to_parent() const
 
 glm::mat4x4 Scene::Transform::parent_to_local() const
 {
-    // compute:
-    //    1/scale       *    rot^-1   *  translate^-1
-    //  [ 1/s.x 0 0 0 ]   [       0 ]   [ 0 0 0 -p.x ]
-    //  [ 0 1/s.y 0 0 ] * [rot^-1 0 ] * [ 0 0 0 -p.y ]
-    //  [ 0 0 1/s.z 0 ]   [       0 ]   [ 0 0 0 -p.z ]
-    //                    [ 0 0 0 1 ]   [ 0 0 0  1   ]
-
     glm::vec3 inv_scale;
     // edge case: if scale is zero:
     inv_scale.x = (scale.x == 0.0f ? 0.0f : 1.0f / scale.x);

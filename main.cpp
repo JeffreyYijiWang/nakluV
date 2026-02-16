@@ -38,7 +38,7 @@ int main(int argc, char **argv) {
 			return 1;
 		}
 		//loads .s72 scene and information
-		Scene scene(configuration.scene_path, configuration.scene_camera);
+		Scene scene(configuration.scene_path, configuration.scene_camera, configuration.animation_settings);
 
 		//loads vulkan library, creates surface, initializes helpers:
 		RTG rtg(configuration);
