@@ -1156,6 +1156,12 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 void Render::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
+	{//update the animations according to the drivers
+		scene.animation_setting = rtg.configuration.animation_settings;
+		float new_t = dt + scene.return_time;
+		scene.update_drivers(new_t);
+	}
+
 	{//static sun and sky 
 		bool sun_defined = false;
 		bool sky_defined = false;

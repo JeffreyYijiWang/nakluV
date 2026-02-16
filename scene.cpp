@@ -878,7 +878,11 @@ void Scene::update_drivers(float dt)
 {
     if (animation_setting == 2) return;
     for (Scene::Driver& driver : drivers) {
-
+        if (animation_setting == 2) {
+            std::cout << "driver time: " << driver.cur_time << std::endl;
+            return_time = driver.cur_time;
+            return;
+        }
         if (driver.cur_time_index == driver.times.size()) continue;
         driver.cur_time += dt;
         auto found_it = std::upper_bound(driver.times.begin() + driver.cur_time_index, driver.times.end(), driver.cur_time);
