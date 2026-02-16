@@ -7,13 +7,13 @@
 #include <optional>
 #include <unordered_map>
 
-Scene::Scene(std::string const& filename)
+Scene::Scene(std::string filename, std::optional<std::string> camera)
 {
-    load(data_path(filename));
+    load(data_path(filename), camera);
 }
 
 
-void Scene::load(std::string const& filename)
+void Scene::load(std::string  filename, std::optional<std::string> requested_camera)
 {
     //check file format
     if (filename.substr(filename.size() - 4, 4) != ".s72")
@@ -41,8 +41,8 @@ void Scene::load(std::string const& filename)
         std::cout << "looked through header" << std::endl;
         for (int32_t i = 1; i < int32_t(object.size()); ++i)
         {
-            auto object_i = object[i].as_object().value();
-            std::optional<std::string> type = object_i.find("type")->second.as_string();
+            auto object_index = object[i].as_object().value();
+            std::optional<std::string> type = object_index.find("type")->second.as_string();
             if (!type)
             {
                 throw std::runtime_error("Type value not found, expected a type value in objects in .s72 format");
@@ -50,7 +50,7 @@ void Scene::load(std::string const& filename)
 
             if (type.value() == "SCENE")
             {
-                if (auto res = object_i.find("roots"); res != object_i.end())
+                if (auto res = object_index.find("roots"); res != object_index.end())
                 {
                     auto roots_opt = res->second.as_array();
                     if (roots_opt.has_value())
@@ -79,7 +79,7 @@ void Scene::load(std::string const& filename)
             }
             else if (type.value() == "NODE")
             {
-                std::string node_name = object_i.find("name")->second.as_string().value();
+                std::string node_name = object_index.find("name")->second.as_string().value();
                 int32_t cur_node_index;
                 // look at the map and see if the node has been made already
                 if (auto node_found = nodes_map.find(node_name); node_found != nodes_map.end())
@@ -94,7 +94,7 @@ void Scene::load(std::string const& filename)
                     nodes_map.insert({ node_name, cur_node_index });
                 }
                 // set position
-                if (auto translation = object_i.find("translation"); translation != object_i.end())
+                if (auto translation = object_index.find("translation"); translation != object_index.end())
                 {
                     std::vector<sejp::value> res = translation->second.as_array().value();
                     assert(res.size() == 3);
@@ -103,7 +103,7 @@ void Scene::load(std::string const& filename)
                     nodes[cur_node_index].transform.position.z = float(res[2].as_number().value());
                 }
                 // set rotation
-                if (auto rotation = object_i.find("rotation"); rotation != object_i.end())
+                if (auto rotation = object_index.find("rotation"); rotation != object_index.end())
                 {
                     std::vector<sejp::value> res = rotation->second.as_array().value();
                     assert(res.size() == 4);
@@ -113,7 +113,7 @@ void Scene::load(std::string const& filename)
                     nodes[cur_node_index].transform.rotation.w = float(res[3].as_number().value());
                 }
                 // set scale
-                if (auto scale = object_i.find("scale"); scale != object_i.end())
+                if (auto scale = object_index.find("scale"); scale != object_index.end())
                 {
                     std::vector<sejp::value> res = scale->second.as_array().value();
                     assert(res.size() == 3);
@@ -122,7 +122,7 @@ void Scene::load(std::string const& filename)
                     nodes[cur_node_index].transform.scale.z = float(res[2].as_number().value());
                 }
                 // set children
-                if (auto res = object_i.find("children"); res != object_i.end())
+                if (auto res = object_index.find("children"); res != object_index.end())
                 {
                     std::vector<sejp::value> children = res->second.as_array().value();
                     for (int32_t j = 0; j < int32_t(children.size()); ++j)
@@ -144,7 +144,7 @@ void Scene::load(std::string const& filename)
                 }
 
                 // set mesh
-                if (auto res = object_i.find("mesh"); res != object_i.end())
+                if (auto res = object_index.find("mesh"); res != object_index.end())
                 {
                     std::string mesh_name = res->second.as_string().value();
                     if (auto mesh_found = meshes_map.find(mesh_name); mesh_found != meshes_map.end())
@@ -162,7 +162,7 @@ void Scene::load(std::string const& filename)
                 }
 
                 // set camera
-                if (auto res = object_i.find("camera"); res != object_i.end())
+                if (auto res = object_index.find("camera"); res != object_index.end())
                 {
                     std::string camera_name = res->second.as_string().value();
                     if (auto camera_found = cameras_map.find(camera_name); camera_found != cameras_map.end())
@@ -180,7 +180,7 @@ void Scene::load(std::string const& filename)
                 }
 
                 // set light
-                if (auto res = object_i.find("light"); res != object_i.end())
+                if (auto res = object_index.find("light"); res != object_index.end())
                 {
                     std::string light_name = res->second.as_string().value();
                     int32_t light_index = -1;
@@ -208,7 +208,7 @@ void Scene::load(std::string const& filename)
             }
             else if (type.value() == "MESH")
             {
-                std::string mesh_name = object_i.find("name")->second.as_string().value();
+                std::string mesh_name = object_index.find("name")->second.as_string().value();
                 int32_t cur_mesh_index;
                 // look at the map and see if the node has been made already
                 if (auto mesh_found = meshes_map.find(mesh_name); mesh_found != meshes_map.end())
@@ -227,10 +227,10 @@ void Scene::load(std::string const& filename)
                 // Assuming all attributes are in the same PosNorTanTex format
 
                 // get count
-                meshes[cur_mesh_index].count = int(object_i.find("count")->second.as_number().value());
+                meshes[cur_mesh_index].count = int(object_index.find("count")->second.as_number().value());
                 vertices_count += meshes[cur_mesh_index].count;
                 // get attributes
-                if (auto attributes_res = object_i.find("attributes"); attributes_res != object_i.end())
+                if (auto attributes_res = object_index.find("attributes"); attributes_res != object_index.end())
                 {
                     auto attributes = attributes_res->second.as_object().value();
                     // get position
@@ -352,7 +352,7 @@ void Scene::load(std::string const& filename)
                 }
 
                 // get material
-                if (auto res = object_i.find("material"); res != object_i.end())
+                if (auto res = object_index.find("material"); res != object_index.end())
                 {
                     std::string material_name = res->second.as_string().value();
                     if (auto material_found = materials_map.find(material_name); material_found != materials_map.end())
@@ -371,7 +371,7 @@ void Scene::load(std::string const& filename)
             }
             else if (type.value() == "CAMERA")
             {
-                std::string camera_name = object_i.find("name")->second.as_string().value();
+                std::string camera_name = object_index.find("name")->second.as_string().value();
                 int32_t cur_camera_index;
                 // look at the map and see if the node has been made already
                 if (auto camera_found = cameras_map.find(camera_name); camera_found != cameras_map.end())
@@ -386,7 +386,7 @@ void Scene::load(std::string const& filename)
                     cameras_map.insert({ camera_name, cur_camera_index });
                 }
                 // get perspective
-                if (auto res = object_i.find("perspective"); res != object_i.end())
+                if (auto res = object_index.find("perspective"); res != object_index.end())
                 {
                     auto perspective = res->second.as_object().value();
                     // aspect, vfov, and near are required
@@ -403,7 +403,7 @@ void Scene::load(std::string const& filename)
             }
             else if (type.value() == "MATERIAL")
             {
-                std::string material_name = object_i.find("name")->second.as_string().value();
+                std::string material_name = object_index.find("name")->second.as_string().value();
                 int32_t cur_material_index;
                 // look at the map and see if the node has been made already
                 if (auto material_found = materials_map.find(material_name); material_found != materials_map.end())
@@ -419,7 +419,7 @@ void Scene::load(std::string const& filename)
                 }
                 //TODO: noraml, displacement mapfind pbr
                 // find lambertian
-                if (auto res = object_i.find("lambertian"); res != object_i.end())
+                if (auto res = object_index.find("lambertian"); res != object_index.end())
                 {
                     if (auto albeto_res = res->second.as_object().value().find("albedo"); albeto_res != res->second.as_object().value().end())
                     {
@@ -499,10 +499,10 @@ void Scene::load(std::string const& filename)
             }
             else if (type.value() == "LIGHT")
             {
-                std::string light_name = object_i.find("name")->second.as_string().value();
+                std::string light_name = object_index.find("name")->second.as_string().value();
                
                 glm::vec3 tint = glm::vec3(1.0f, 1.0f, 1.0f);
-                if (auto tint_res = object_i.find("tint"); tint_res != object_i.end())
+                if (auto tint_res = object_index.find("tint"); tint_res != object_index.end())
                 {
                     auto tint_arr = tint_res->second.as_array().value();
                     assert(tint_arr.size() == 3);
@@ -512,7 +512,7 @@ void Scene::load(std::string const& filename)
                 }
                 
                 float shadow = 0.0f;
-                if (auto shadow_res = object_i.find("shadow"); shadow_res != object_i.end())
+                if (auto shadow_res = object_index.find("shadow"); shadow_res != object_index.end())
                 {
                     shadow = float(shadow_res->second.as_number().value());
                 }
@@ -520,7 +520,7 @@ void Scene::load(std::string const& filename)
                 float angle = 0.0f;
                 float strength = 1.0f;
                 
-                if (auto sun_res = object_i.find("sun"); sun_res != object_i.end())
+                if (auto sun_res = object_index.find("sun"); sun_res != object_index.end())
                 {
                     auto sun_obj = sun_res->second.as_object().value();
                     if (auto angle_res = sun_obj.find("angle"); angle_res != sun_obj.end())
@@ -563,9 +563,9 @@ void Scene::load(std::string const& filename)
             }
             else if (type.value() == "DRIVER")
             {
-                std::string driver_name = object_i.find("name")->second.as_string().value();
-                std::string node_name = object_i.find("node")->second.as_string().value();
-                std::string channel_str = object_i.find("channel")->second.as_string().value();
+                std::string driver_name = object_index.find("name")->second.as_string().value();
+                std::string node_name = object_index.find("node")->second.as_string().value();
+                std::string channel_str = object_index.find("channel")->second.as_string().value();
                 
                 //parse channel
                 Driver::Channel channel;
@@ -588,7 +588,7 @@ void Scene::load(std::string const& filename)
                 
                 //parse interpolation
                 Driver::InterpolationMode interp = Driver::InterpolationMode::LINEAR;
-                if (auto interp_res = object_i.find("interpolation"); interp_res != object_i.end())
+                if (auto interp_res = object_index.find("interpolation"); interp_res != object_index.end())
                 {
                     std::string interp_str = interp_res->second.as_string().value();
                     if (interp_str == "STEP")
@@ -626,8 +626,8 @@ void Scene::load(std::string const& filename)
                     .interpolation = interp,
                 };
 
-                std::vector<sejp::value> times = object_i.find("times")->second.as_array().value();
-                std::vector<sejp::value> values = object_i.find("values")->second.as_array().value();
+                std::vector<sejp::value> times = object_index.find("times")->second.as_array().value();
+                std::vector<sejp::value> values = object_index.find("values")->second.as_array().value();
                 if (channel == Driver::Channel::Rotation)
                 {
                     if (times.size() * 4 != values.size())
@@ -668,46 +668,47 @@ void Scene::load(std::string const& filename)
 
     std::cout << "----Finished loading " + filename + "---------" << std::endl;
 
-    //{ // build the camera local to world transform vectors
-    //    std::vector<uint32_t> cur_transform_list;
-    //    std::function<void(uint32_t)> fill_camera_and_light_transforms = [&](uint32_t i) {
-    //        const Scene::Node& cur_node = nodes[i];
-    //        cur_transform_list.push_back(i);
-    //        if (cur_node.light_index != -1) {
-    //            lights[cur_node.light_index].local_to_world = cur_transform_list;
-    //        }
-    //        if (cur_node.cameras_index != -1)
-    //        {
-    //            cameras[cur_node.cameras_index].local_to_world = cur_transform_list;
-    //            if (requested_camera.has_value() && requested_camera.value() == cameras[cur_node.cameras_index].name)
-    //            {
-    //                requested_camera_index = cur_node.cameras_index;
-    //            }
-    //        }
-    //        // look for cameras in children
-    //        for (uint32_t child_index : cur_node.children)
-    //        {
-    //            fill_camera_and_light_transforms(child_index);
-    //        }
-    //        cur_transform_list.pop_back();
-    //        };
+    { // build the camera local to world transform vectors
+       std::vector<uint32_t> cur_transform_list;
+       std::function<void(uint32_t)> fill_camera_and_light_transforms = [&](uint32_t i) {
+            const Scene::Node& cur_node = nodes[i];
+            cur_transform_list.push_back(i);
 
-    //    // traverse the scene hiearchy:
-    //    for (uint32_t k = 0; k < root_nodes.size(); ++k)
-    //    {
-    //        fill_camera_and_light_transforms(root_nodes[k]);
-    //    }
-    //}
+            if (cur_node.light_index != -1) { // Light attached
+                lights[cur_node.light_index].local_to_world = cur_transform_list;
+            }
+            if (cur_node.cameras_index != -1) //Camera attached
+            {
+                cameras[cur_node.cameras_index].local_to_world = cur_transform_list;
+                if (requested_camera.has_value() && requested_camera.value() == cameras[cur_node.cameras_index].name)
+                {
+                    requested_camera_index = cur_node.cameras_index;
+                }
+            }
+            // look for cameras in children
+            for (uint32_t child_index : cur_node.children)
+            {
+                fill_camera_and_light_transforms(child_index);
+            }
+            cur_transform_list.pop_back();
+       };
 
-    //// could not find requested camera
-    //if (requested_camera.has_value() && requested_camera_index == -1)
-    //{
-    //    throw std::runtime_error("Did not find camera with name: " + requested_camera.value() + ", aborting...");
-    //}
-    //if (requested_camera_index == -1)
-    //{
-    //    requested_camera_index = 0;
-    //}
+        // traverse the scene hiearchy:
+        for (uint32_t k = 0; k < root_nodes.size(); ++k)
+        {
+            fill_camera_and_light_transforms(root_nodes[k]);
+        }
+    }
+
+    ////// could not find requested camera
+    if (requested_camera.has_value() && requested_camera_index == -1)
+    {
+        throw std::runtime_error("Did not find camera with name: " + requested_camera.value() + ", aborting...");
+    }
+    if (requested_camera_index == -1)
+    {
+        requested_camera_index = 0;
+    }
     debug();
 }
 
@@ -871,7 +872,7 @@ void Scene::debug()
     }
 }
 
-glm::mat4x4 Scene::Transform::parent_from_local() const
+glm::mat4x4 Scene::Transform::local_to_parent() const
 {
     // compute:
     //    translate   *   rotate    *   scale
@@ -890,7 +891,7 @@ glm::mat4x4 Scene::Transform::parent_from_local() const
     );
 }
 
-glm::mat4x4 Scene::Transform::local_from_parent() const
+glm::mat4x4 Scene::Transform::parent_to_local() const
 {
     // compute:
     //    1/scale       *    rot^-1   *  translate^-1

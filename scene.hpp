@@ -18,8 +18,8 @@ struct Scene {
         glm::quat rotation = glm::quat(0.0f, 0.0f, 0.0f, 1.0f); // x, y, z, w
         glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
 
-        glm::mat4x4 parent_from_local() const;  // graphics 362
-        glm::mat4x4 local_from_parent() const;
+        glm::mat4x4 local_to_parent() const;  // graphics 362
+        glm::mat4x4 parent_to_local() const;
     };
 
 
@@ -67,6 +67,7 @@ struct Scene {
         float vfov; // vertical field of view in radians.
         float near;
         float far = -1.0f; // If far <= 0, use infinite projection
+        std::vector<uint32_t> local_to_world; // index 0 is root node - list of node indices to get from local to world 
     };
 
     struct Light {
@@ -75,6 +76,8 @@ struct Scene {
         float shadow = 0.0f;
         float angle = 0.0f;
         float strength = 1.0f;
+
+        std::vector<uint32_t> local_to_world; // index 0 is root node - list of node indices to get from local to world 
     };
 
     struct Node {
@@ -114,19 +117,19 @@ struct Scene {
     std::vector<Node> nodes;
     std::vector<Camera> cameras;
     int32_t requested_camera_index = -1;
-    std::vector<Light> lights;
     std::vector<Mesh> meshes;
     uint32_t vertices_count = 0;
     std::vector<Material> materials;
     std::vector<Texture> textures;
     std::vector<uint32_t> root_nodes;
+    std::vector<Light> lights;
     std::string scene_path;
     std::vector<Driver> drivers;
     uint8_t animation_setting;
 
     // Functions
-    Scene(std::string const& filename);
-    void load(std::string const& filename);
+    Scene(std::string filename, std::optional<std::string> camera);
+    void load(std::string filename, std::optional<std::string> camera);
     void debug();
 
 };

@@ -167,6 +167,7 @@ struct Render : RTG::Application {
 
 	//--------------------------------------------------------------------
 	//Resources that change when time passes or the user interacts:
+	struct OrbitCamera;
 
 	virtual void update(float dt) override;
 	virtual void on_input(InputEvent const &) override;
@@ -181,7 +182,9 @@ struct Render : RTG::Application {
 		Scene = 0, 
 		Free = 1, 
 		Debug = 2
-	} camera_mode = CameraMode::Free;
+	} camera_mode = CameraMode::Scene;
+
+	CameraMode culling_camera = CameraMode::Scene;
 
 	//used when camera_mode  = CameraMode::Free: 
 	struct OrbitCamera {
@@ -192,10 +195,17 @@ struct Render : RTG::Application {
 		float fov = 60.0f / 180.0f * float(M_PI); //vertical field of view (radians)
 		float near = 0.1f; // near clippingplan 
 		float far = 1000.0f; // far clipping plane
-	} free_camera;
+	} user_camera, debug_camera;
 
 	//computer dd form the current camera (as set by camera_mode) during ujpdate()
 	mat4 CLIP_FROM_WORLD;
+
+	//CullingFrustum scene_cam_frustum, user_cam_frustum;
+
+	std::array<glm::mat4x4, 3> clip_from_view;
+	std::array<glm::mat4x4, 3> view_from_world;
+	 
+	virtual void update_free_camera(OrbitCamera& camc, CameraMode type);
 
 	std::vector < LinesPipeline::Vertex > lines_vertices;
 

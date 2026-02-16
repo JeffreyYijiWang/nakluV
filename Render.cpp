@@ -14,6 +14,7 @@
 #include <iostream>
 #include <algorithm>
 #include <fstream>
+
 #include <deque>
 
 Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
@@ -480,6 +481,79 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 
 		vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
 	}
+	{ // setup camera if no --camera in the command line, scene camera is set in update
+		if (!rtg_.configuration.scene_camera.has_value())
+		{
+			float x = user_camera.radius * std::sin(user_camera.elevation) * std::cos(user_camera.azimuth);
+			float y = user_camera.radius * std::sin(user_camera.elevation) * std::sin(user_camera.azimuth);
+			float z = user_camera.radius * std::cos(user_camera.elevation);
+			// cache culling view
+			// cache view and clip matrices
+			view_from_world[1] = glm::make_mat4(look_at(
+				x, y, z,		  // eye
+				0.0f, 0.0f, 0.0f, // target
+				0.0f, 0.0f, 1.0f  // up
+			).data());
+
+			clip_from_view[1] = glm::make_mat4(perspective(
+				60.0f * float(M_PI) / 180.0f,									// vfov
+				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+				0.1f,															// near
+				1000.0f															// far
+			).data());
+
+			view_from_world[2] = view_from_world[1];
+			clip_from_view[2] = clip_from_view[1];
+			glm::mat4x4 clip = clip_from_view[1] * view_from_world[1];
+			CLIP_FROM_WORLD = to_mat4(clip);
+
+			camera_mode = CameraMode::Free;
+		}
+		else
+		{
+			Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
+			glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.local_to_parent();
+			for (int i = 1; i < cur_camera.local_to_world.size(); ++i)
+			{
+				cur_camera_transform *= scene.nodes[cur_camera.local_to_world[i]].transform.local_to_parent();
+			}
+			glm::vec3 eye = glm::vec3(cur_camera_transform[3]);
+			glm::vec3 forward = -glm::vec3(cur_camera_transform[2]);
+			glm::vec3 target = eye + forward;
+
+			view_from_world[0] = glm::make_mat4(look_at(
+				eye.x, eye.y, eye.z,		  // eye
+				target.x, target.y, target.z, // target
+				0.0f, 0.0f, 1.0f			  // up
+			).data());
+
+			clip_from_view[0] = glm::make_mat4((perspective(
+				cur_camera.vfov,   // vfov
+				cur_camera.aspect, // aspect
+				cur_camera.near,   // near
+				cur_camera.far	   // far
+			) *
+				look_at(
+					eye.x, eye.y, eye.z,		  // eye
+					target.x, target.y, target.z, // target
+					0.0f, 0.0f, 1.0f			  // up
+				)).data());
+
+			clip_from_view[1] = glm::make_mat4(perspective(
+				60.0f * float(M_PI) / 180.0f,									// vfov
+				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+				0.1f,															// near
+				1000.0f															// far
+			).data());
+
+			clip_from_view[2] = clip_from_view[1];
+
+			glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
+			CLIP_FROM_WORLD = to_mat4(clip);
+
+			camera_mode = CameraMode::Scene;
+		}
+	}
 }
 
 Render::~Render() {
@@ -885,21 +959,39 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			VkExtent2D extent = rtg.swapchain_extent;
 			VkOffset2D offset = { .x = 0, .y = 0 };
 
-			VkRect2D scissor{
-				.offset = offset,
-				.extent = extent,
-			};
-			vkCmdSetScissor(workspace.command_buffer, 0, 1, &scissor);
+			//letterboxing 
+			if (camera_mode == CameraMode::Scene) {
+				float camera_aspect = scene.cameras[scene.requested_camera_index].aspect; // W / H
+				float actual_aspect = rtg.swapchain_extent.width / float(rtg.swapchain_extent.height);
+				if (actual_aspect < camera_aspect) {
+					extent.height = uint32_t(float(extent.width) / camera_aspect);
+					offset.y += (rtg.swapchain_extent.height - extent.height) / 2;
+				}
+				else if (actual_aspect > camera_aspect) {
+					extent.width = uint32_t(float(extent.height) * camera_aspect);
+					offset.x += (rtg.swapchain_extent.width - extent.width) / 2;
+				}
+			}
 
-			VkViewport viewport{
-				.x = float(offset.x),
-				.y = float(offset.y),
-				.width = float(extent.width),
-				.height = float(extent.height),
-				.minDepth = 0.0f,
-				.maxDepth = 1.0f,
-			};
-			vkCmdSetViewport(workspace.command_buffer, 0, 1, &viewport);
+			{
+				VkRect2D scissor{
+					.offset = offset,
+					.extent = extent,
+				};
+				vkCmdSetScissor(workspace.command_buffer, 0, 1, &scissor);
+			}
+
+			{
+				VkViewport viewport{
+					.x = float(offset.x),
+					.y = float(offset.y),
+					.width = float(extent.width),
+					.height = float(extent.height),
+					.minDepth = 0.0f,
+					.maxDepth = 1.0f,
+				};
+				vkCmdSetViewport(workspace.command_buffer, 0, 1, &viewport);
+			}
 		}
 
 		//{//draw with the backgorun pipeline
@@ -1038,35 +1130,133 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 void Render::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
-	if(camera_mode == CameraMode::Scene)
+	if (camera_mode == CameraMode::Scene)
 	{
-		//camera rotating around the origin: 
-		float ang = float(M_PI) * 2.0f * 10.0f * (time / 60.0f);
-		CLIP_FROM_WORLD = perspective(
-			60.0f * float(M_PI / 180.0f), //vfov 
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), //aspect
-			0.1f, // near 
-			1000.0f //far 
-		) * look_at(
-			3.0f * std::cos(ang), 3.0f * std::sin(ang), 1.0f, //eye
-			0.0f, 0.0f, 0.5f, //target 
-			0.0f, 0.0f, 1.0f //up
-		);
+		Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
+		glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.local_to_parent();
+		for (int i = 1; i < cur_camera.local_to_world.size(); ++i)
+		{
+			cur_camera_transform *= scene.nodes[cur_camera.local_to_world[i]].transform.local_to_parent();
+		}
+		glm::vec3 eye = glm::vec3(cur_camera_transform[3]);
+		glm::vec3 forward = -glm::vec3(cur_camera_transform[2]);
+		glm::vec3 target = eye + forward;
+
+		view_from_world[0] = glm::make_mat4(
+			look_at(
+				eye.x, eye.y, eye.z,		   // eye
+				target.x, target.y, target.z, // target
+				0.0f, 0.0f, 1.0f			   // up
+			)
+			.data());
+
+		clip_from_view[0] = glm::make_mat4(perspective(
+			cur_camera.vfov,	  // vfov
+			cur_camera.aspect, // aspect
+			cur_camera.near,	  // near
+			cur_camera.far	  // far
+		).data());
+
+		glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
+		CLIP_FROM_WORLD = to_mat4(clip);
 	}
 	else if (camera_mode == CameraMode::Free) {
 		CLIP_FROM_WORLD = perspective(
-			free_camera.fov,
+			user_camera.fov,
 			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
-			free_camera.near,
-			free_camera.far
-			) * orbit(
-				free_camera.target_x, free_camera.target_y, free_camera.target_z, 
-				free_camera.azimuth, free_camera.elevation, free_camera.radius
-			);
+			user_camera.near,
+			user_camera.far
+		) * orbit(
+			user_camera.target_x, user_camera.target_y, user_camera.target_z,
+			user_camera.azimuth, user_camera.elevation, user_camera.radius
+		);
+
+		clip_from_view[1] = glm::make_mat4(perspective(
+			60.0f * float(M_PI) / 180.0f,									// vfov
+			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+			0.1f,															// near
+			1000.0f															// far
+		)
+			.data());
+
+		view_from_world[1] = glm::make_mat4(orbit(
+			user_camera.target_x, user_camera.target_y, user_camera.target_z,
+			user_camera.azimuth, user_camera.elevation, user_camera.radius
+		)
+			.data());
+	}
+	else if (camera_mode == CameraMode::Debug) {
+		CLIP_FROM_WORLD = perspective(
+			debug_camera.fov,
+			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height),  //aspect 
+			debug_camera.near,
+			debug_camera.far
+		) * orbit(
+			debug_camera.target_x, debug_camera.target_y, debug_camera.target_z,
+			debug_camera.azimuth, debug_camera.elevation, debug_camera.radius
+		);
+
+		clip_from_view[2] = glm::make_mat4(perspective(
+			60.0f * float(M_PI) / 180.0f,									// vfov
+			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+			0.1f,															// near
+			1000.0f															// far
+		)
+			.data());
+
+		view_from_world[2] = glm::make_mat4(orbit(
+			debug_camera.target_x, debug_camera.target_y, debug_camera.target_z,
+			debug_camera.azimuth, debug_camera.elevation, debug_camera.radius
+		)
+			.data());
 	}
 	else {
-		assert(0 && "only two camera modes");
+		assert(0 && "only three camera modes");
 	}
+
+
+		
+		//
+
+		//if (last_aspect != float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height))
+		//{
+		//	clip_from_view[1] = glm::make_mat4(perspective(
+		//		60.0f * float(M_PI) / 180.0f,									// vfov
+		//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+		//		0.1f,															// near
+		//		1000.0f															// far
+		//	)
+		//		.data());
+
+		//	clip_from_view[2] = clip_from_view[1];
+
+
+		//	OrbitCamera& cam = debug_camera;
+		//	update_free_camera(cam, CameraMode::Debug);
+		//	last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
+		//}
+
+	
+		//static float last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
+
+		//if (last_aspect != float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height))
+		//{
+		//	clip_from_view[1] = glm::make_mat4(perspective(
+		//		60.0f * float(M_PI) / 180.0f,									// vfov
+		//		rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+		//		0.1f,															// near
+		//		1000.0f															// far
+		//	)
+		//		.data());
+
+		//	clip_from_view[2] = clip_from_view[1];
+
+
+		//	OrbitCamera& cam = debug_camera;
+		//	update_free_camera(cam, CameraMode::Debug);
+		//	last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
+		//}
+	
 
 	{//static sun and sky 
 		world.SKY_DIRECTION.x = 0.0f;
@@ -1096,7 +1286,7 @@ void Render::update(float dt) {
 		{
 				Scene::Node& cur_node = scene.nodes[i];
 				//iterating through the tree to determine position
-				glm::mat4x4 cur_node_transform_in_parent = (cur_node.transform.parent_from_local());
+				glm::mat4x4 cur_node_transform_in_parent = (cur_node.transform.local_to_parent());
 				if (transform_stack.empty())
 				{
 					transform_stack.push_back(cur_node_transform_in_parent);
@@ -1136,7 +1326,9 @@ void Render::update(float dt) {
 
 					transform_stack.pop_back();
 				}
-
+				else { //pop if no mesh found
+					transform_stack.pop_back();
+				}
 		};
 		// traverse the scene hiearchy:
 		for (uint32_t j = 0; j < scene.root_nodes.size(); ++j)
@@ -1158,14 +1350,77 @@ void Render::on_input(InputEvent const &evt) {
 
 
 	//general controls:
-	if (evt.type == InputEvent::KeyDown && evt.key.key == GLFW_KEY_TAB) {
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_TAB || evt.key.key == GLFW_KEY_C)) {
 		// swithc camera mode 
-		camera_mode = CameraMode((int(camera_mode) + 1) % 2);
+		camera_mode = CameraMode((int(camera_mode) + 1) % 3);
+		if (scene.cameras.empty()) {
+			camera_mode =  CameraMode((int(camera_mode) + 1) % 3);
+			std::cerr << "There are no scene camera in the scene, switching to user\n";
+		}
+		//update_free_camera(free_camera, camera_mode)
+		return;
+	}
+
+	//another switching camera mode via 1. Scene 2. User 3. Debug
+	if (evt.type == InputEvent::Type::KeyDown && (evt.key.key == GLFW_KEY_1 || evt.key.key == GLFW_KEY_2 || evt.key.key == GLFW_KEY_3))
+	{
+		if (evt.key.key == GLFW_KEY_1)
+		{
+			if (scene.cameras.empty())
+			{
+				std::cerr << "There are no scene camera in the scene, unable to switch\n";
+			}
+			else
+			{
+				camera_mode = CameraMode::Scene;
+				std::cout << "scene MODE" << std::endl;
+				//culling_camera = CameraMode::Scene;
+			}
+			return;
+		}
+		else if (evt.key.key == GLFW_KEY_2)
+		{
+			camera_mode = CameraMode::Free;
+			/*culling_camera = CameraMode::Free;*/
+			std::cout << "user MODE" << std::endl;
+
+		}
+		else if (evt.key.key == GLFW_KEY_3)
+		{
+			camera_mode = CameraMode::Debug;
+			std::cout << "DEBUG MODE" << std::endl;
+		}
+		return;
+	}
+
+	if (camera_mode == CameraMode::Scene)
+	{
+		if (evt.type == InputEvent::Type::KeyDown && evt.key.key == GLFW_KEY_LEFT)
+		{
+			if (scene.cameras.size() == 1)
+			{
+				std::cout << "Only one camera available, can't switch to another scene camera" << std::endl;
+				return;
+			}
+			scene.requested_camera_index = (scene.requested_camera_index - 1 + int32_t(scene.cameras.size())) % scene.cameras.size();
+			std::cout << "Viewing through scene camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
+		}
+		else if (evt.type == InputEvent::Type::KeyDown &&  evt.key.key == GLFW_KEY_RIGHT)
+		{
+			if (scene.cameras.size() == 1)
+			{
+				std::cout << "Only one camera available,  can't switch to another scene camera" << std::endl;
+				return;
+			}
+			scene.requested_camera_index = (scene.requested_camera_index + 1) % scene.cameras.size();
+			std::cout << "Viewing through camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
+		}
 		return;
 	}
 
 	//free camera controls:
-	if (camera_mode == CameraMode::Free) {
+	OrbitCamera &free_camera = (camera_mode == CameraMode::Free) ? user_camera : debug_camera;
+	if (camera_mode == CameraMode::Free || camera_mode == CameraMode::Debug) {
 		if (evt.type == InputEvent::MouseWheel) {
 			//change distance by 10% every scoll click : 
 			free_camera.radius *= std::exp(std::log(1.1f) * -evt.wheel.y);
@@ -1173,6 +1428,7 @@ void Render::on_input(InputEvent const &evt) {
 			//make sure camera isn't too close or too far from target: 
 			free_camera.radius = std::max(free_camera.radius, 0.5f * free_camera.near);
 			free_camera.radius = std::min(free_camera.radius, 2.0f * free_camera.far);
+			/*update_free_camera(free_camera, camera_mode);*/
 			return;
 		}
 
@@ -1183,8 +1439,8 @@ void Render::on_input(InputEvent const &evt) {
 			float init_y = evt.button.y;
 			OrbitCamera init_camera = free_camera;
 
-
-			action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
+			CameraMode mode = camera_mode;
+			action = [this, init_x, init_y, init_camera, &free_camera, &mode](InputEvent const& evt) {
 				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
 					//cancle uypon button lifted: 
 					action = nullptr;
@@ -1212,11 +1468,11 @@ void Render::on_input(InputEvent const &evt) {
 					free_camera.target_x = init_camera.target_x - dx * camera_from_world[0] - dy * camera_from_world[1];
 					free_camera.target_y = init_camera.target_y - dx * camera_from_world[4] - dy * camera_from_world[5];
 					free_camera.target_z = init_camera.target_z - dx * camera_from_world[8] - dy * camera_from_world[9];
-
+				/*	update_free_camera(free_camera, camera_mode);*/
 					return;
 				}
 				};
-
+			return;
 		}
 		else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
 			//start tumbling
@@ -1225,8 +1481,8 @@ void Render::on_input(InputEvent const &evt) {
 			float init_x = evt.button.x;
 			float init_y = evt.button.y;
 			OrbitCamera init_camera = free_camera;
-
-			action = [this, init_x, init_y, init_camera](InputEvent const& evt) {
+			CameraMode mode = camera_mode;
+			action = [this, init_x, init_y, init_camera, &free_camera, &mode](InputEvent const& evt) {
 				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT) {
 					action = nullptr; 
 					return;
@@ -1246,12 +1502,38 @@ void Render::on_input(InputEvent const &evt) {
 					const float twopi = 2.0f * float(M_PI);
 					free_camera.azimuth -= std::round(free_camera.azimuth / twopi) * twopi;
 					free_camera.elevation -= std::round(free_camera.elevation / twopi) * twopi;
+					/*update_free_camera(free_camera, camera_mode);*/
 					return;
 				}
 			};
-
+			
 			return;
 		}
 
 	}
+}
+
+void Render::update_free_camera(OrbitCamera& cam, CameraMode type )
+{
+	assert(type != CameraMode::Scene);
+	float x = cam.radius * std::cos(cam.elevation) * std::cos(cam.azimuth);
+	float y = cam.radius * std::cos(cam.elevation) * std::sin(cam.azimuth);
+	float z = cam.radius * std::sin(cam.elevation);
+	float up = 1.0f;
+	// flip up axis when upside down
+	if (int((abs(cam.elevation) + float(M_PI) / 2) / float(M_PI)) % 2 == 1)
+	{
+		up = -1.0f;
+	}
+	glm::vec3 eye = glm::vec3{ x + cam.target_x, y + cam.target_y, z +cam.target_z };
+	uint8_t type_index = static_cast<uint8_t>(type);
+	view_from_world[type_index] = glm::make_mat4(look_at(
+		eye.x, eye.y, eye.z,			 // eye
+		cam.target_x, cam.target_y, cam.target_z, // target
+		0.0f, 0.0f, up							 // up
+	)
+		.data());
+
+	glm::mat4x4 clip = clip_from_view[type_index] * view_from_world[type_index];
+	CLIP_FROM_WORLD = to_mat4(clip);
 }

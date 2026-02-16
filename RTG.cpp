@@ -53,7 +53,12 @@ void RTG::Configuration::parse(int argc, char **argv) {
 			if (argi + 1 >= argc) throw std::runtime_error("--scene requires a .s72 file (a filename name).");
 			argi += 1;
 			scene_path = argv[argi];
-		} else {
+		}
+		else if (arg == "--camera") {
+			argi += 1;
+			scene_camera = argv[argi];
+		}
+		else {
 			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
 		}
 	}
@@ -65,6 +70,7 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--drawing-size <w> <h>", "Set the size of the surface to draw to.");
 	callback("--headless", "Don't create a window; read events from stdin.");
 	callback("--scene <path>", "Read the scene file with .s72 format");
+	callback("--camera <camera>", "View the scene through camera with name <camera>.");
 }
 
 
