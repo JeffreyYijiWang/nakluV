@@ -1130,6 +1130,31 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 void Render::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
 
+	{//update the animations according to the drivers
+		scene.animation_setting = rtg.configuration.animation_settings;
+		scene.update_drivers(dt);
+	}
+
+	{//static sun and sky 
+		world.SKY_DIRECTION.x = 0.0f;
+		world.SKY_DIRECTION.y = 0.0f;
+		world.SKY_DIRECTION.z = 1.0f;
+
+		world.SKY_ENERGY.r = 0.1f;
+		world.SKY_ENERGY.g = 0.1f;
+		world.SKY_ENERGY.b = 0.2f;
+
+		world.SUN_DIRECTION.x = 6.0f / 23.0f;
+		world.SUN_DIRECTION.y = 13.0f / 23.0f;
+		world.SUN_DIRECTION.x = 18.0f / 23.0f;
+
+		world.SUN_ENERGY.r = 1.0f;
+		world.SUN_ENERGY.g = 1.0f;
+		world.SUN_ENERGY.b = 0.9f;
+
+	}
+
+
 	if (camera_mode == CameraMode::Scene)
 	{
 		Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
@@ -1258,24 +1283,6 @@ void Render::update(float dt) {
 		//}
 	
 
-	{//static sun and sky 
-		world.SKY_DIRECTION.x = 0.0f;
-		world.SKY_DIRECTION.y = 0.0f;
-		world.SKY_DIRECTION.z = 1.0f;
-
-		world.SKY_ENERGY.r = 0.1f;
-		world.SKY_ENERGY.g = 0.1f;
-		world.SKY_ENERGY.b = 0.2f;
-
-		world.SUN_DIRECTION.x = 6.0f / 23.0f; 
-		world.SUN_DIRECTION.y = 13.0f / 23.0f; 
-		world.SUN_DIRECTION.x = 18.0f / 23.0f;
-
-		world.SUN_ENERGY.r = 1.0f;
-		world.SUN_ENERGY.g = 1.0f;
-		world.SUN_ENERGY.b = 0.9f;
-
-	}
 	
 	{ // fill object instances with scene hiearchy
 		object_instances.clear();
@@ -1348,7 +1355,37 @@ void Render::on_input(InputEvent const &evt) {
 		return;
 	}
 
+	//animation controls
+	//pausing
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_P)) {
+		if (rtg.configuration.animation_settings != 2) {
+			rtg.configuration.animation_settings = 2;
+		}
+		else {
+			rtg.configuration.animation_settings = rtg.configuration.past_animation_settings;
+			std::cout << "return time:" << scene.return_time << std::endl;
+			set_animation_time(scene.return_time);
 
+		}
+		return;
+	}
+	//change to loop
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_L)) {
+		rtg.configuration.animation_settings = 1;
+		rtg.configuration.past_animation_settings = 1;
+		return;
+	}
+	//change to once
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_O)) {
+		rtg.configuration.animation_settings = 0;
+		rtg.configuration.past_animation_settings = 0;
+		return;
+	}
+	//restart 
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_R)) {
+		set_animation_time(0.0f);
+		return;
+	}
 	//general controls:
 	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_TAB || evt.key.key == GLFW_KEY_C)) {
 		// swithc camera mode 
@@ -1512,6 +1549,12 @@ void Render::on_input(InputEvent const &evt) {
 
 	}
 }
+
+void Render::set_animation_time(float t)
+{
+	scene.set_driver_time(t);
+}
+
 
 void Render::update_free_camera(OrbitCamera& cam, CameraMode type )
 {

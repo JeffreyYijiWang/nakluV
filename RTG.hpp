@@ -83,6 +83,9 @@ struct RTG {
 		//scene camera
 		std::optional<std::string> scene_camera;
 
+		//animtion settings
+		uint8_t animation_settings = 0; // 0 play once, 1 loop, 2 paused
+		uint8_t past_animation_settings = 0; // 0 play once, 1 loop, 2 paused
 
 		//for configuration construction + management:
 		Configuration() = default;

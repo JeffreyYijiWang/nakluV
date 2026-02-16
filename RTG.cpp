@@ -58,6 +58,25 @@ void RTG::Configuration::parse(int argc, char **argv) {
 			argi += 1;
 			scene_camera = argv[argi];
 		}
+		else if (arg == "--animation") {
+			argi += 1;
+			std::string settings = argv[argi];
+			if (settings == "paused") {
+				animation_settings = 2;
+				past_animation_settings = 2;
+			}
+			else if (settings == "loop") {
+				animation_settings = 1;
+				past_animation_settings = 1;
+			}
+			else if (settings == "play-once") {
+				animation_settings = 0;
+				past_animation_settings = 0;
+			}
+			else {
+				throw std::runtime_error("--animation only takes loop, play-once, or paused as parameters");
+			}
+		}
 		else {
 			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
 		}
@@ -70,7 +89,8 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--drawing-size <w> <h>", "Set the size of the surface to draw to.");
 	callback("--headless", "Don't create a window; read events from stdin.");
 	callback("--scene <path>", "Read the scene file with .s72 format");
-	callback("--camera <camera>", "View the scene through camera with name <camera>.");
+	callback("--camera <camera name>", "View the scene through camera with name <camera>.");
+	callback("--animation < loop | play-once | paused >", "Animate the scene with drivers starting paused, only plays once, or loops, default plays once");
 }
 
 
