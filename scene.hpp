@@ -6,7 +6,7 @@
 #include <vector>
 #include <optional>
 #include <map>
-#include <>
+#include <variant>
 /**
  * Loads from .s72 format and manages a hierarchy of transformations.
  */
@@ -32,13 +32,13 @@ struct Scene {
             Linear = 0,
             SRGB= 1,
             RGBE = 2,
-        } format = VKformat::Linear;
+        } format = Linear;
 
-        Texture(std::string value_, bool single_channel_) : value(value_), is_2D(true), has_src(true), single_channel(single_channel_) {};
-        Texture(float value_) : value(value_), is_2D(true), has_src(false), single_channel(true) {};
-        Texture(std::string value_) : value(value_), is_2D(true), has_src(true), single_channel(false) {};
-        Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false), single_channel(false) {};
-        Texture() : value(glm::vec3{ 1,1,1 }), is_2D(true), has_src(false), single_channel(false) {};
+        Texture(std::string value_) : value(value_), is_2D(true), has_src(true)) {};
+        Texture(float value_) : value(value_), is_2D(true), has_src(false) {};
+        Texture(std::string value_) : value(value_), is_2D(true), has_src(true){};
+        Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false) {};
+        Texture() : value(glm::vec3{ 1,1,1 }), is_2D(true), has_src(false) {};
 
         enum struct DefaultTexture : uint8_t {
             DefaultAlbedo = 0,

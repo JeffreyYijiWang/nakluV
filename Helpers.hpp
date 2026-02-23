@@ -59,7 +59,7 @@ struct Helpers {
 
 		//NOTE: could define default constructor, move constructor, move assignment, destructor for a bit more paranoia
 	};
-	AllocatedImage create_image(VkExtent2D const &extent, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, MapFlag map = Unmapped, uint32t layers = 1, , uint32_t mip_levels = 1);
+	AllocatedImage create_image(VkExtent2D const &extent, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, MapFlag map = Unmapped, uint32_t layers = 1,uint32_t mip_levels = 1);
 	void destroy_image(AllocatedImage &&allocated_image);
 	
 
@@ -72,7 +72,7 @@ struct Helpers {
 	void transfer_to_image_cube(void* data, size_t size, AllocatedImage& target, uint8_t mip_level = 1);
 	VkDeviceSize get_cube_buffer_offset(uint32_t base_width, uint32_t base_height, uint32_t face, uint32_t level, size_t bytes_per_pixel);
 	VkCommandPool transfer_command_pool = VK_NULL_HANDLE;
-	VkCommandBuffer transfer_command_buffer = VK_NULL_HANDLE;
+	std::vector<VkCommandBuffer> transfer_command_buffers;
 
 	//-----------------------
 	//Misc utilities:

@@ -1,6 +1,8 @@
 #include "RTG.hpp"
 
 #include "VK.hpp"
+#include "data_path.hpp"
+
 #include <vulkan/vulkan_core.h>
 #if defined(__APPLE__)
 #include <vulkan/vulkan_beta.h> //for portability subset
@@ -179,53 +181,7 @@ RTG::RTG(Configuration const &configuration_) : helpers(*this) {
 
 	//copy input configuration:
 	configuration = configuration_;
-	if (configuration.cube) {
-
-	//fill in flags/extensions/layers information:
-		{ //create the `instance` (main handle to Vulkan library):
-			VkInstanceCreateFlags instance_flags = 0;
-			std::vector<const char*> instance_extensions;
-			std::vector<const char*> instance_layers;
-			if (configuration.debug) {
-				instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-				instance_layers.emplace_back("VK_LAYER_KHRONOS_validation");
-			}
-			//write debug messenger structure
-			VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info{
-				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
-				.messageSeverity =
-					VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-					| VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
-					| VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-					| VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
-				.messageType =
-					VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-					| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-					| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
-				.pfnUserCallback = debug_callback,
-				.pUserData = nullptr
-			};
-			VkInstanceCreateInfo create_info{
-				.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-				.pNext = (configuration.debug ? &debug_messenger_create_info : nullptr),
-				.flags = instance_flags,
-				.pApplicationInfo = &configuration.application_info,
-				.enabledLayerCount = uint32_t(instance_layers.size()),
-				.ppEnabledLayerNames = instance_layers.data(),
-				.enabledExtensionCount = uint32_t(instance_extensions.size()),
-				.ppEnabledExtensionNames = instance_extensions.data()
-			};
-			VK(vkCreateInstance(&create_info, nullptr, &instance));
-
-			//create debug messenger
-			if (configuration.debug) {
-				PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-				if (!vkCreateDebugUtilsMessengerEXT) {
-					throw std::runtime_error("Failed to lookup debug utils create fn.");
-				}
-				VK(vkCreateDebugUtilsMessengerEXT(instance, &debug_messenger_create_info, nullptr, &debug_messenger));
-			}
-		}
+	/*if (configuration.cube) {*/
 
 	//create the `instance` (main handle to Vulkan library):
 
