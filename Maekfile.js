@@ -44,32 +44,32 @@ const main_objs = [
 // it returns the path to the output .inl file
 
 const background_shaders = [
-	maek.GLSLC('background.vert'),
-	maek.GLSLC('background.frag'),
+	maek.GLSLC('background.vert', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+	maek.GLSLC('background.frag', undefined, { GLSLCFlags: ['-mfmt=c'] }),
 ];
 main_objs.push( maek.CPP('Render-BackgroundPipeline.cpp', undefined, { depends:[...background_shaders] } ) );
 
 const lines_shaders = [
-	maek.GLSLC('lines.vert'),
-	maek.GLSLC('lines.frag'),
+	maek.GLSLC('lines.vert', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+	maek.GLSLC('lines.frag', undefined, { GLSLCFlags: ['-mfmt=c'] }),
 ];
 main_objs.push(maek.CPP('Render-LinesPipeline.cpp', undefined, { depends:[...lines_shaders] } ) );
 
 const objects_shaders = [
-	maek.GLSLC('objects.vert'),
-	maek.GLSLC('objects.frag'),
+	maek.GLSLC('objects.vert', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+	maek.GLSLC('objects.frag', undefined, { GLSLCFlags: ['-mfmt=c'] }),
 ];
 main_objs.push(maek.CPP('Render-ObjectsPipeline.cpp', undefined, { depends: [...objects_shaders] }));
 
 const environment_shaders = [
-	maek.GLSLC('environment.vert'),
-	maek.GLSLC('environment.frag'),
+	maek.GLSLC('environment.vert', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+	maek.GLSLC('environment.frag', undefined, { GLSLCFlags: ['-mfmt=c'] }),
 ];
 main_objs.push( maek.CPP('Render-EnvironmentPipeline.cpp', undefined, { depends:[...environment_shaders] } ) );
 
 const mirror_shaders = [
-	maek.GLSLC('mirror.vert'),
-	maek.GLSLC('mirror.frag'),
+	maek.GLSLC('mirror.vert', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+	maek.GLSLC('mirror.frag', undefined, { GLSLCFlags: ['-mfmt=c'] }),
 ];
 main_objs.push(maek.CPP('Render-MirrorPipeline.cpp', undefined, { depends: [...mirror_shaders] }));
 
@@ -301,6 +301,7 @@ function init_maek() {
 		CPPFlags: [], //extra flags for c++ compiler
 		LINK: [], //the linker and any flags to start with (set below, per-OS)
 		LINKLibs: [], //extra -L and -l flags for linker
+		GLSLCFlags: [], // -E for helper functions
 	}
 
 	if (maek.OS === 'windows') {

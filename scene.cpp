@@ -43,8 +43,14 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
         textures.push_back(Texture(glm::vec3(1.0f, 1.0f, 1.0f)));
         textures.push_back(Texture(1.0f));
         textures.push_back(Texture(0.0f));
-        textures.push_back(Texture(glm::vec3(0.0f, 0.0f, 1.0f)));
-        textures.push_back(Texture(0.0f));
+        textures.push_back(Texture(glm::vec3(0.5f, 0.5f, 1.0f)));
+        textures.push_back(Texture(1.0f));
+
+        // insert the default material
+        materials.push_back(Material{
+            .name = "Default Material",
+            .material_textures = Material::MatLambertian(),
+            });
 
 
         std::cout << "looked through header" << std::endl;
@@ -377,6 +383,9 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                         meshes[cur_mesh_index].material_index = index;
                     }
                 }
+                else {
+                    meshes[cur_mesh_index].material_index = 0;
+                }
             }
             else if (type.value() == "CAMERA")
             {
@@ -465,6 +474,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 // find lambertian
                 if (auto res = object_index.find("lambertian"); res != object_index.end())
                 {
+                    MatLambertian_count++;
                     materials[cur_material_index].material_type = Material::Lambertian;
 
                     if (auto albedo_res = res->second.as_object().value().find("albedo"); albedo_res != res->second.as_object().value().end()) {
@@ -508,18 +518,20 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                             }
                             else
                             { //default lambertian material with nor source texture 
-                                materials[cur_material_index].material_textures = Material::MatLambertian(DefaultAlbedo);
+                                materials[cur_material_index].material_textures = Material::MatLambertian(static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo));
                             }
                         }
                     }
                     else { //no abeldo field 
-                        materials[cur_material_index].material_textures = Material::MatLambertian(DefaultAlbedo);
+                        materials[cur_material_index].material_textures = Material::MatLambertian(static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo));
                     }
                 }
-                else if (auto res = object_index.find("mirror"); res != object_index.end()) {
+                else if (auto mirror_res = object_index.find("mirror"); mirror_res != object_index.end()) {
+                    MatEnvMirror_count++;
                     materials[cur_material_index].material_type = Material::Mirror;
                 }
-                else if (auto res = object_index.find("environment"); res != object_index.end()) {
+                else if (auto env_res = object_index.find("environment"); env_res != object_index.end()) {
+                    MatEnvMirror_count++;
                     materials[cur_material_index].material_type = Material::Environment;
                 }
                 else if (auto res = object_index.find("pbr"); res != object_index.end())

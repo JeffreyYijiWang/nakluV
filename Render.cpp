@@ -127,37 +127,81 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 	//create environment texture
 	if (scene.environment.source != "") {
 		int width, height, n;
-		unsigned char* image;
-		image = stbi_load((scene.scene_path + "/" + scene.environment.source).c_str(), &width, &height, &n, 4);
-		if (image == NULL) throw std::runtime_error("Error loading texture " + scene.scene_path + "/" + scene.environment.source);
+		std::string environment_source = scene.scene_path + "/" + scene.environment.source;
+		std::vector<unsigned char*> images;
+		images.push_back(stbi_load(environment_source.c_str(), &width, &height, &n, 4));
+		if (images[0] == NULL) throw std::runtime_error("Error loading texture " + environment_source);
 		// cube map must have 6 sides and stacked vertically
 		if (height % 6 != 0 || width != height / 6) {
 			throw std::runtime_error("Invalid image dimensions for a cubemap");
 		}
 
+		uint8_t mip_levels = 1;
+		size_t period_index = environment_source.find_last_of(".");
+		std::string base_source = environment_source.substr(0, period_index);
+		std::string file_type = environment_source.substr(period_index + 1, environment_source.size() - period_index);
+		int last_width = width;
+		int last_height = height;
+		int total_size = width * height;
+		// load all ggx mip levels of the environment map
+		while (true) {
+			// attempt to load the next mip level, if failed, exit
+			int cur_width, cur_height, cur_n;
+			std::string cur_source = base_source + "." + std::to_string(mip_levels) + "." + file_type;
+			images.push_back(stbi_load(cur_source.c_str(), &cur_width, &cur_height, &cur_n, 4));
+			if (images[mip_levels] == NULL) {
+				if (rtg.configuration.debug) {
+					std::cout << "Environment Loading Completed, " << int(mip_levels) << " mip levels\n";
+				}
+				break;
+			}
+			if (cur_width == last_width >> 2 && cur_height == last_height >> 2) {
+				throw std::runtime_error("Mip not properly resized");
+			}
+			if (cur_height % 6 != 0 || cur_width != cur_height / 6) {
+				throw std::runtime_error("Invalid image dimensions for a cubemap");
+			}
+			total_size += cur_width * cur_height;
+			last_width = cur_width;
+			last_height = cur_height;
+			mip_levels++;
+		}
+
 		int face_length = width;
 
 		// convert rgbe to rgb values
-		std::vector<glm::vec4> rgb_image(width * height); // Store the converted RGB data
-
-		for (int i = 0; i < width * height; ++i) {
-			glm::u8vec4 rgbe_pixel = glm::u8vec4(image[4 * i], image[4 * i + 1], image[4 * i + 2], image[4 * i + 3]);
-			rgb_image[i] = rgbe_to_float(rgbe_pixel);
+		std::vector<glm::vec4> rgb_image(total_size); // Store the converted RGB data
+		int temp_width = width;
+		int temp_height = height;
+		uint64_t pixel_index = 0;
+		for (uint8_t level = 0; level < mip_levels; ++level) {
+			for (int i = 0; i < temp_width * temp_height; ++i) {
+				glm::u8vec4 rgbe_pixel = glm::u8vec4(images[level][4 * i], images[level][4 * i + 1], images[level][4 * i + 2], images[level][4 * i + 3]);
+				rgb_image[pixel_index] = rgbe_to_float(rgbe_pixel);
+				++pixel_index;
+			}
+			temp_width = temp_width >> 1;
+			temp_height = temp_height >> 1;
 		}
 
 		World_environment = rtg.helpers.create_image(
 			VkExtent2D{ .width = uint32_t(face_length), .height = uint32_t(face_length) }, // size of each face
-			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_FORMAT_R32G32B32A32_SFLOAT,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			Helpers::Unmapped, 6
+			Helpers::Unmapped, 6, mip_levels
 		);
 
-		rtg.helpers.transfer_to_image_cube(image, 4 * width * height, World_environment);
+		rtg.helpers.transfer_to_image_cube(rgb_image.data(), 4 * 4 * rgb_image.size(), World_environment, 6);
 
 		//free image:
-		stbi_image_free(image);
+		for (unsigned char* image : images) {
+			stbi_image_free(image);
+		}
+
+		// set world mip level
+		world.CAMERA_POSITION_ENVIRONMENT_MIPS.w = float(mip_levels - 1);
 
 		{//make image view for environment
 
@@ -171,7 +215,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				.subresourceRange{
 					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 					.baseMipLevel = 0,
-					.levelCount = 1,
+					.levelCount = mip_levels,
 					.baseArrayLayer = 0,
 					.layerCount = 6,
 				},
@@ -186,7 +230,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				.flags = 0,
 				.magFilter = VK_FILTER_LINEAR,
 				.minFilter = VK_FILTER_LINEAR,
-				.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+				.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
 				.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 				.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 				.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
@@ -196,7 +240,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				.compareEnable = VK_FALSE,
 				.compareOp = VK_COMPARE_OP_ALWAYS, //doesn't matter if compare isn't enabled
 				.minLod = 0.0f,
-				.maxLod = 0.0f,
+				.maxLod = float(mip_levels - 1),
 				.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
 				.unnormalizedCoordinates = VK_FALSE,
 			};
@@ -204,7 +248,69 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 		}
 	}
 
+	{//make a sampler for the normal textures and BRDF LUT
+		VkSamplerCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.flags = 0,
+			.magFilter = VK_FILTER_NEAREST,
+			.minFilter = VK_FILTER_NEAREST,
+			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.mipLodBias = 0.0f,
+			.anisotropyEnable = VK_FALSE,
+			.maxAnisotropy = 0.0f, //doesn't matter if anisotropy isn't enabled
+			.compareEnable = VK_FALSE,
+			.compareOp = VK_COMPARE_OP_ALWAYS, //doesn't matter if compare isn't enabled
+			.minLod = 0.0f,
+			.maxLod = 0.0f,
+			.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+			.unnormalizedCoordinates = VK_FALSE,
+		};
+		VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
+	}
+	/*
+	{ // environment BRDF LUT
+		{ // create the BRDF LUT
+			int width, height, n;
+			float* image = stbi_loadf("../resource/ibl_brdf_lut.png", &width, &height, &n, 2); // r and g only
+			if (image == NULL) throw std::runtime_error("Error loading Environment BRDF LUT texture: ../resource/ibl_brdf_lut.png");
+			World_environment_brdf_lut = rtg.helpers.create_image(
+				VkExtent2D{ .width = uint32_t(width) , .height = uint32_t(height) }, //size of image
+				VK_FORMAT_R32G32_SFLOAT, //how to interpret image data (in this case, linearly-encoded 8-bit RGBA) TODO: double check format
+				VK_IMAGE_TILING_OPTIMAL,
+				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sample and upload
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, //should be device-local
+				Helpers::Unmapped
+			);
 
+			rtg.helpers.transfer_to_image(image, sizeof(image[0]) * width * height * 2, World_environment_brdf_lut);
+
+			//free image:
+			stbi_image_free(image);
+		}
+		{//make image view for lut
+
+			VkImageViewCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.flags = 0,
+				.image = World_environment_brdf_lut.handle,
+				.viewType = VK_IMAGE_VIEW_TYPE_2D,
+				.format = World_environment_brdf_lut.format,
+				// .components sets swizzling and is fine when zero-initialized
+				.subresourceRange{
+					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					.baseMipLevel = 0,
+					.levelCount = 1,
+					.baseArrayLayer = 0,
+					.layerCount = 1,
+				},
+			};
+
+			VK(vkCreateImageView(rtg.device, &create_info, nullptr, &World_environment_brdf_lut_view));
+		}
+	}*/
 	{//create descriptor pool:
 		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); //for easier to read counting
 
@@ -216,7 +322,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			},
 			VkDescriptorPoolSize{
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = 1 * per_workspace, //one descriptoper set, one set per workspace
+				.descriptorCount = 2 * per_workspace, //one descriptoper set, one set per workspace
 			},
 			VkDescriptorPoolSize{
 				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -331,8 +437,13 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			};
 
+			VkDescriptorImageInfo World_environment_brdf_lut_info{
+				.sampler = texture_sampler,
+				.imageView = World_environment_brdf_lut_view,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			};
 
-			std::array < VkWriteDescriptorSet, 3> writes{
+			std::array< VkWriteDescriptorSet, 4 > writes{
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = workspace.Camera_descriptors,
@@ -359,6 +470,15 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pBufferInfo = &World_environment_info,
+				},
+				VkWriteDescriptorSet{
+					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.dstSet = workspace.World_descriptors,
+					.dstBinding = 2,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pBufferInfo = &World_environment_brdf_lut_info,
 				},
 			};
 
@@ -448,7 +568,8 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				if (cur_texture.has_src)
 				{
 					int width, height, n;
-					unsigned char* image = stbi_load((scene.scene_path + "/" + cur_texture.source).c_str(), &width, &height, &n, 4);
+					std::string source = std::get<std::string>(cur_texture.value);
+					unsigned char* image = stbi_load((scene.scene_path + "/" + source).c_str(), &width, &height, &n, 4);
 					if (image == NULL)
 						throw std::runtime_error("Error loading texture " + scene.scene_path + cur_texture.source);
 
@@ -468,7 +589,8 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				}
 				else
 				{
-					uint8_t data[4] = { uint8_t(cur_texture.value.x * 255.0f), uint8_t(cur_texture.value.y * 255.0f), uint8_t(cur_texture.value.z * 255.0f), 255 };
+					glm::vec3 value = std::get<glm::vec3>(cur_texture.value);
+					uint8_t data[4] = { uint8_t(value.x * 255.0f), uint8_t(value.y * 255.0f), uint8_t(value.z * 255.0f), 255 };
 					// make a place for the texture to live on the GPU:
 					textures.emplace_back(rtg.helpers.create_image(
 						VkExtent2D{ .width = 1, .height = 1 }, // size of image
@@ -511,7 +633,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			}
 			assert(texture_views.size() == textures.size());
 		}
-
+		
 		{//make sampler for the textures
 			VkSamplerCreateInfo create_info{
 				.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
@@ -538,7 +660,10 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 		{//create the texture descirptor pool
 
-			uint32_t per_texture = uint32_t(textures.size()); //for easier to read counting
+			uint32_t per_material = uint32_t(scene.materials.size());
+			uint32_t per_pbr_material = uint32_t(scene.MatPBR_count);
+			uint32_t per_lambertian_material = uint32_t(scene.MatLambertian_count);
+			uint32_t per_envmirror_material = uint32_t(scene.MatEnvMirror_count);
 
 			std::array < VkDescriptorPoolSize, 1> pool_sizes{
 
@@ -561,30 +686,74 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 
 		{//allocate and write the texture descriptor sets
 			//Allocate and write the texture descriptor sets
-			VkDescriptorSetAllocateInfo alloc_info{
-				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-				.descriptorPool = texture_descriptor_pool,
-				.descriptorSetCount = 1,
-				.pSetLayouts = &objects_pipeline.set2_TEXTURE,
+			VkDescriptorSetAllocateInfo mat_lambertian_alloc_info{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = material_descriptor_pool,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &objects_pipeline.set2_TEXTURE,
 			};
-			texture_descriptors.assign(textures.size(), VK_NULL_HANDLE);
+			VkDescriptorSetAllocateInfo mat_pbr_alloc_info{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = material_descriptor_pool,
+				.descriptorSetCount = 1,
+				.pSetLayouts = &pbr_pipeline.set2_TEXTURE,
+			};
+			VkDescriptorSetAllocateInfo mat_envmirror_alloc_info{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = material_descriptor_pool,
+				.descriptorSetCount = 1,
+				.pSetLayouts = &environment_pipeline.set2_TEXTURE,
+			};
+			material_descriptors.assign(scene.materials.size(), VK_NULL_HANDLE);
 
-			for (VkDescriptorSet& descriptor_set : texture_descriptors) {
-				VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &descriptor_set));
+			for (uint32_t material_index = 0; material_index < scene.materials.size(); ++material_index) {
+				VkDescriptorSet& descriptor_set = material_descriptors[material_index];
+				if (scene.materials[material_index].material_type == Scene::Material::Lambertian) {
+					VK(vkAllocateDescriptorSets(rtg.device, &mat_lambertian_alloc_info, &descriptor_set));
+				}
+				else if (scene.materials[material_index].material_type == Scene::Material::PBR) {
+					VK(vkAllocateDescriptorSets(rtg.device, &mat_pbr_alloc_info, &descriptor_set));
+				}
+				else {
+					VK(vkAllocateDescriptorSets(rtg.device, &mat_envmirror_alloc_info, &descriptor_set));
+				}
 			}
+			//write descriptors for materials:
+			std::vector< VkWriteDescriptorSet > writes(scene.materials.size());
 
-			//write descptor for textures 
-			std::vector < VkDescriptorImageInfo > infos(textures.size());
-			std::vector < VkWriteDescriptorSet > writes(textures.size());
+			std::vector< std::array<VkDescriptorImageInfo, 5> > infos(scene.materials.size());
+			constexpr uint8_t pbr_tex_count = 5;
+			constexpr uint8_t lambertian_tex_count = 3;
+			constexpr uint8_t envmirror_tex_count = 2;
 
 			for (Helpers::AllocatedImage const& image : textures) {
-				size_t i = &image - &textures[0];
+				const Scene::Material& material = scene.materials[material_index];
+				uint8_t cur_material_tex_count = 0;
 
-				infos[i] = VkDescriptorImageInfo{
+				std::array<VkDescriptorImageInfo, 5>& cur_infos = infos[material_index];
+				cur_infos[0] = VkDescriptorImageInfo{
 					.sampler = texture_sampler,
 					.imageView = texture_views[i],
 					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 				};
+
+				cur_infos[1] = VkDescriptorImageInfo{
+				.sampler = texture_sampler,
+				.imageView = texture_views[material.displacement_index],
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				};
+
+
+				if (material.material_type == Scene::Material::Lambertian) {
+					cur_material_tex_count = lambertian_tex_count;
+					cur_infos[2] = VkDescriptorImageInfo{
+					.sampler = texture_sampler,
+					.imageView = texture_views[std::get<Scene::Material::MatLambertian>(material.material_textures).albedo_index],
+					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				else {
+					cur_material_tex_count = envmirror_tex_count;
+				}
+
 
 				writes[i] = VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -593,7 +762,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = &infos[i],
+					.pImageInfo = &cur_infos[0],
 				};
 			}
 
@@ -717,6 +886,16 @@ Render::~Render() {
 
 	if (World_environment.handle) {
 		rtg.helpers.destroy_image(std::move(World_environment));
+	}
+
+
+	if (World_environment_brdf_lut_view) {
+		vkDestroyImageView(rtg.device, World_environment_brdf_lut_view, nullptr);
+		World_environment_brdf_lut_view = VK_NULL_HANDLE;
+	}
+
+	if (World_environment_brdf_lut.handle) {
+		rtg.helpers.destroy_image(std::move(World_environment_brdf_lut));
 	}
 
 
@@ -1164,6 +1343,21 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
 		
+		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty()) {
+			//bind Transforms descriptor set:
+			std::array< VkDescriptorSet, 2 > descriptor_sets{
+				workspace.World_descriptors, //0: World
+				workspace.Transforms_descriptors, //1: Transforms
+			};
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer, //command buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+				lambertian_pipeline.layout, //pipeline layout
+				0, //first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), //descriptor sets count, ptr
+				0, nullptr //dynamic offsets count, ptr
+			);
+		}
 
 		if(!lambertian_instances.empty())
 		{//draw with the object pipeline:
@@ -1183,21 +1377,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
 
 			}
-			{//bind world and transforms descript set:
-				std::array< VkDescriptorSet, 2 > descriptor_sets{
-					workspace.World_descriptors, //0: world 
-					workspace.Transforms_descriptors, //1: Transforms
-				};
-				vkCmdBindDescriptorSets(
-					workspace.command_buffer,  // command buffer
-					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
-					objects_pipeline.layout, //pipline layout
-					0, //first set 
-					uint32_t(descriptor_sets.size()), descriptor_sets.data(), //descriptorr set coutn, ptr
-					0, nullptr// dynamic offset cout, ptr
-				);
-			}
-
+			
 			 //camera descriptor set is stil bounde (!)
 
 
@@ -1235,9 +1415,17 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 			//draw all instances:
 			uint32_t index_offset = uint32_t(lambertian_instances.size());// account for lambertian size
-			for (EnvironmentInstance const& inst : environment_instances) {
+			for (ObjectInstance const& inst : environment_instances) {
 				uint32_t index = uint32_t(&inst - &environment_instances[0]) + index_offset;
-
+				//bind texture descriptor set:
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer, //command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+					environment_pipeline.layout, //pipeline layout
+					2, //second set
+					1, &material_descriptors[inst.material_index], //descriptor sets count, ptr
+					0, nullptr //dynamic offsets count, ptr
+				);
 				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
 			}
 
@@ -1257,9 +1445,17 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 			//draw all instances:
 			uint32_t index_offset = uint32_t(lambertian_instances.size() + environment_instances.size());// account for lambertian and environment size
-			for (MirrorInstance const& inst : mirror_instances) {
+			for (ObjectInstance const& inst : mirror_instances) {
 				uint32_t index = uint32_t(&inst - &mirror_instances[0]) + index_offset;
-
+				//bind texture descriptor set:
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer, //command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+					mirror_pipeline.layout, //pipeline layout
+					2, //second set
+					1, &material_descriptors[inst.material_index], //descriptor sets count, ptr
+					0, nullptr //dynamic offsets count, ptr
+				);
 				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
 			}
 
@@ -1458,7 +1654,9 @@ void Render::update(float dt) {
 		if (camera_mode == CameraMode::Scene) {
 			glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
 			CLIP_FROM_WORLD = to_mat4(clip);
-			world.CAMERA_POSITION = glm::vec4(eye, 1.0f);
+			world.CAMERA_POSITION_ENVIRONMENT_MIPS.x = eye.x;
+			world.CAMERA_POSITION_ENVIRONMENT_MIPS.y = eye.y;
+			world.CAMERA_POSITION_ENVIRONMENT_MIPS.z = eye.z;
 		}
 	}
 	if (camera_mode != CameraMode::Scene) {
@@ -1501,7 +1699,9 @@ void Render::update(float dt) {
 									user_camera.radius * std::cos(user_camera.elevation) * std::sin(user_camera.azimuth),
 									user_camera.radius * std::sin(user_camera.elevation)
 				};
-				world.CAMERA_POSITION = glm::vec4(eye, 1.0f);
+				world.CAMERA_POSITION_ENVIRONMENT_MIPS.x = eye.x;
+				world.CAMERA_POSITION_ENVIRONMENT_MIPS.y = eye.y;
+				world.CAMERA_POSITION_ENVIRONMENT_MIPS.z = eye.z;
 			}
 			else if (camera_mode == CameraMode::Debug) {
 				CLIP_FROM_WORLD = perspective(
@@ -1538,7 +1738,9 @@ void Render::update(float dt) {
 									debug_camera.radius * std::cos(debug_camera.elevation) * std::sin(debug_camera.azimuth),
 									debug_camera.radius * std::sin(debug_camera.elevation)
 				};
-				world.CAMERA_POSITION = glm::vec4(eye, 1.0f);
+				world.CAMERA_POSITION_ENVIRONMENT_MIPS.x = eye.x;
+				world.CAMERA_POSITION_ENVIRONMENT_MIPS.y = eye.y;
+				world.CAMERA_POSITION_ENVIRONMENT_MIPS.z = eye.z;
 			}
 
 

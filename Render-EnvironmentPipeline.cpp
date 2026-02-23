@@ -16,7 +16,7 @@ void Render::EnvironmentPipeline:::create(RTG& rtg, VkRenderPass render_pass, ui
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
 	{// the set0_world layout hold workl dinfo in a unhiform buffer use in the fragment shader: and a environment cubemap
-		std::array< VkDescriptorSetLayoutBinding, 2> bindings{
+		std::array< VkDescriptorSetLayoutBinding, 3> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -25,6 +25,12 @@ void Render::EnvironmentPipeline:::create(RTG& rtg, VkRenderPass render_pass, ui
 			},
 			 VkDescriptorSetLayoutBinding{
 				.binding = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+			 VkDescriptorSetLayoutBinding{
+				.binding = 2,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
@@ -59,31 +65,35 @@ void Render::EnvironmentPipeline:::create(RTG& rtg, VkRenderPass render_pass, ui
 		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set1_Transforms));
 	}
 
-	//{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
-	//	std::array< VkDescriptorSetLayoutBinding, 1> bindings{
-	//		VkDescriptorSetLayoutBinding{
-	//			.binding = 0,
-	//			.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-	//			.descriptorCount = 1,
-	//			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-	//		},
-	//	};
-
-	//	VkDescriptorSetLayoutCreateInfo create_info{
-	//		.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-	//		.bindingCount = uint32_t(bindings.size()),
-	//		.pBindings = bindings.data(),
-	//	};
-
-	//	VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set2_TEXTURE));
-	//}
+	{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
+		std::array< VkDescriptorSetLayoutBinding, 1> bindings{
+		VkDescriptorSetLayoutBinding{
+				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+		VkDescriptorSetLayoutBinding{
+				.binding = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+	};
+		VkDescriptorSetLayoutCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.bindingCount = uint32_t(bindings.size()),
+			.pBindings = bindings.data(),
+		};
+	VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set2_TEXTURE));
+	}
 
 
 	{ //create pipline layout
 		std::array < VkDescriptorSetLayout, 2> layouts{
 			set0_World, 
 			set1_Transforms,
-		/*	set2_TEXTURE,*/
+			set2_TEXTURE,
 		};
 
 		VkPushConstantRange range{

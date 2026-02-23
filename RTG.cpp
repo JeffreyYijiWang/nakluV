@@ -20,6 +20,42 @@
 #include <set>
 
 void RTG::Configuration::parse(int argc, char **argv) {
+	if (cube) {
+		if (argc < 2) throw std::runtime_error("insufficient number of parameters, input image required.");
+		in_image = argv[1];
+		for (int argi = 2; argi < argc; ++argi) {
+			std::string arg = argv[argi];
+			if (arg == "--debug") {
+				debug = true;
+			}
+			else if (arg == "--no-debug") {
+				debug = false;
+			}
+			else if (arg == "--ggx") {
+				if (argi + 1 >= argc) throw std::runtime_error("--ggx requires a parameter (a file path for output image).");
+				argi += 1;
+				ggx_out_image = argv[argi];
+			}
+			else if (arg == "--lambertian ") {
+				if (argi + 1 >= argc) throw std::runtime_error("--lambertian requires a parameter (a file path for output image).");
+				argi += 1;
+				lambert_out_image = argv[argi];
+			}
+			else if (arg == "--ggx-levels ") {
+				if (argi + 1 >= argc) throw std::runtime_error("--ggx-levels requires a parameter (number of output levels).");
+				argi += 1;
+				ggx_levels = uint8_t(atoi(argv[argi]));
+			}
+			else {
+				throw std::runtime_error("Unrecognized argument '" + arg + "'.");
+			}
+		}
+		if (ggx_out_image == "" && lambert_out_image == "") {
+			throw std::runtime_error("No output image requested");
+		}
+		return;
+	}
+
 	for (int argi = 1; argi < argc; ++argi) {
 		std::string arg = argv[argi];
 		if (arg == "--debug") {
@@ -107,6 +143,14 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--animation < loop | play-once | paused >", "Animate the scene with drivers starting paused, only plays once, or loops, default plays once");
 }
 
+void RTG::Configuration::cube_usage(std::function< void(const char*, const char*) > const& callback) {
+	callback("--debug, --no-debug", "Turn on/off debug and validation layers.");
+	callback("--lambertian <name>", "Save the output lambertian image to <name>.");
+	callback("--ggx <name.png>", "Save the output ggx images to <name.1.png> to <name.N.png>.");
+	callback("--ggx-levels <N>", "Set the number of levels wanted for ggx, default min(5, log2(input size))");
+}
+
+
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_callback(
 	VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -135,10 +179,56 @@ RTG::RTG(Configuration const &configuration_) : helpers(*this) {
 
 	//copy input configuration:
 	configuration = configuration_;
+	if (configuration.cube) {
 
 	//fill in flags/extensions/layers information:
+		{ //create the `instance` (main handle to Vulkan library):
+			VkInstanceCreateFlags instance_flags = 0;
+			std::vector<const char*> instance_extensions;
+			std::vector<const char*> instance_layers;
+			if (configuration.debug) {
+				instance_extensions.emplace_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+				instance_layers.emplace_back("VK_LAYER_KHRONOS_validation");
+			}
+			//write debug messenger structure
+			VkDebugUtilsMessengerCreateInfoEXT debug_messenger_create_info{
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+				.messageSeverity =
+					VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+					| VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+					| VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+					| VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+				.messageType =
+					VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+					| VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+					| VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+				.pfnUserCallback = debug_callback,
+				.pUserData = nullptr
+			};
+			VkInstanceCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+				.pNext = (configuration.debug ? &debug_messenger_create_info : nullptr),
+				.flags = instance_flags,
+				.pApplicationInfo = &configuration.application_info,
+				.enabledLayerCount = uint32_t(instance_layers.size()),
+				.ppEnabledLayerNames = instance_layers.data(),
+				.enabledExtensionCount = uint32_t(instance_extensions.size()),
+				.ppEnabledExtensionNames = instance_extensions.data()
+			};
+			VK(vkCreateInstance(&create_info, nullptr, &instance));
+
+			//create debug messenger
+			if (configuration.debug) {
+				PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
+				if (!vkCreateDebugUtilsMessengerEXT) {
+					throw std::runtime_error("Failed to lookup debug utils create fn.");
+				}
+				VK(vkCreateDebugUtilsMessengerEXT(instance, &debug_messenger_create_info, nullptr, &debug_messenger));
+			}
+		}
 
 	//create the `instance` (main handle to Vulkan library):
+
 	
 	{
 		VkInstanceCreateFlags instance_flags = 0;

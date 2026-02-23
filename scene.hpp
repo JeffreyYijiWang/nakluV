@@ -50,8 +50,29 @@ struct Scene {
     };
 
     struct Material {
+
+        enum MaterialType : uint8_t {
+            Lambertian,
+            PBR,
+            Mirror,
+            Environment
+        } material_type;
+
+
         std::string name;
-        uint32_t texture_index;
+        uint32_t normal_index = 3;
+        uint32_t displacement_index = 4;
+        struct MatLambertian {
+            uint32_t albedo_index = 0;
+        };
+
+        struct MatPBR {
+            uint32_t albedo_index = 0;
+            uint32_t roughness_index = 1;
+            uint32_t metalness_index = 2;
+        };
+
+        std::variant<std::monostate, MatLambertian, MatPBR> material_textures;
     };
 
     struct Mesh {
@@ -67,7 +88,7 @@ struct Scene {
         Attribute attributes[4]; // Position, Normal, Tangent, TexCoord
 
 
-        int32_t material_index = -1;
+        uint32_t material_index = 0; // default material at index 0
     };
 
     struct Camera {
@@ -99,7 +120,7 @@ struct Scene {
         std::vector<uint32_t> children; // list of children, OPTOMIZE?
         int32_t cameras_index = -1;
         int32_t mesh_index = -1;
-        int32_t environment = -1; 
+        bool environment = false;
         int32_t light_index = -1;
     };
 
@@ -133,6 +154,9 @@ struct Scene {
     std::vector<Mesh> meshes;
     uint32_t vertices_count = 0;
     std::vector<Material> materials;
+    uint32_t MatPBR_count;
+    uint32_t MatLambertian_count;
+    uint32_t MatEnvMirror_count; // both environment and mirror just need normal and displacement
     std::vector<Texture> textures;
     std::vector<uint32_t> root_nodes;
     std::vector<Light> lights;
@@ -140,6 +164,7 @@ struct Scene {
     std::vector<Driver> drivers;
     uint8_t animation_setting;
     float return_time = 0.0f;
+    Environment environment = Environment();
 
     // Functions
     Scene(std::string filename, std::optional<std::string> camera, uint8_t animation_setting);

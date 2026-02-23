@@ -86,10 +86,10 @@ struct Render : RTG::Application {
 			struct { float r, g, b, padding_; } SKY_ENERGY;
 			struct { float x, y, z, padding_; } SUN_DIRECTION;
 			struct { float r, g, b, padding_; } SUN_ENERGY;
-			glm::vec4 CAMERA_POSITION;
+			glm::vec4 CAMERA_POSITION_ENVIRONMENT_MIPS; //xyz: camera position, z: environment mips
 		};
 
-		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4+ 4 * 4, "World is the expected size.");
+		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4+ 4 * 4 , "World is the expected size.");
 		struct Transform {
 			mat4 CLIP_FROM_LOCAL;
 			mat4 WORLD_FROM_LOCAL;
@@ -197,6 +197,9 @@ struct Render : RTG::Application {
 	VkImageView World_environment_view = VK_NULL_HANDLE;
 	VkSampler World_environment_sampler = VK_NULL_HANDLE;
 
+	Helpers::AllocatedImage World_environment_brdf_lut;
+	VkImageView World_environment_brdf_lut_view = VK_NULL_HANDLE;
+
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
 	VkSampler texture_sampler = VK_NULL_HANDLE;
@@ -263,25 +266,12 @@ struct Render : RTG::Application {
 
 	ObjectsPipeline::World world;
 
-	struct LambertianInstance {
+	struct ObjectInstance {
 		ObjectVertices vertices;
 		Transform transform;
-		uint32_t texture = 0;
+		uint32_t material_index;
 	};
-
-	std::vector< LambertianInstance > lambertian_instances;
-
-	struct EnvironmentInstance {
-		ObjectVertices vertices;
-		Transform transform;
-	};
-	std::vector< EnvironmentInstance > environment_instances;
-
-	struct MirrorInstance {
-		ObjectVertices vertices;
-		Transform transform;
-	};
-	std::vector< MirrorInstance > mirror_instances;
+	std::vector< ObjectInstance > lambertian_instances, environment_instances, mirror_instances;
 
 	//-------------------------------------
 	void set_animation_time(float t);
