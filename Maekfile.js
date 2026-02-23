@@ -43,27 +43,35 @@ const main_objs = [
 //maek.GLSLC(...) builds a glsl source file:
 // it returns the path to the output .inl file
 
-//uncomment to build background shaders and pipeline:
 const background_shaders = [
 	maek.GLSLC('background.vert'),
 	maek.GLSLC('background.frag'),
 ];
 main_objs.push( maek.CPP('Render-BackgroundPipeline.cpp', undefined, { depends:[...background_shaders] } ) );
 
-//uncomment to build lines shaders and pipeline:
 const lines_shaders = [
 	maek.GLSLC('lines.vert'),
 	maek.GLSLC('lines.frag'),
 ];
 main_objs.push(maek.CPP('Render-LinesPipeline.cpp', undefined, { depends:[...lines_shaders] } ) );
 
-//uncomment to build objects shaders and pipeline:
 const objects_shaders = [
 	maek.GLSLC('objects.vert'),
 	maek.GLSLC('objects.frag'),
 ];
-main_objs.push( maek.CPP('Render-ObjectsPipeline.cpp', undefined, { depends:[...objects_shaders] } ) );
+main_objs.push(maek.CPP('Render-ObjectsPipeline.cpp', undefined, { depends: [...objects_shaders] }));
 
+const environment_shaders = [
+	maek.GLSLC('environment.vert'),
+	maek.GLSLC('environment.frag'),
+];
+main_objs.push( maek.CPP('Render-EnvironmentPipeline.cpp', undefined, { depends:[...environment_shaders] } ) );
+
+const mirror_shaders = [
+	maek.GLSLC('mirror.vert'),
+	maek.GLSLC('mirror.frag'),
+];
+main_objs.push(maek.CPP('Render-MirrorPipeline.cpp', undefined, { depends: [...mirror_shaders] }));
 
 
 const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');

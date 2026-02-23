@@ -8,6 +8,7 @@
 #include "scene.hpp"
 #include "frustum_culling.hpp"
 #include "glm.hpp"
+#include "timer.hpp"
 
 struct Render : RTG::Application {
 
@@ -85,9 +86,10 @@ struct Render : RTG::Application {
 			struct { float r, g, b, padding_; } SKY_ENERGY;
 			struct { float x, y, z, padding_; } SUN_DIRECTION;
 			struct { float r, g, b, padding_; } SUN_ENERGY;
+			glm::vec4 CAMERA_POSITION;
 		};
 
-		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4, "World is the expected size.");
+		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4+ 4 * 4, "World is the expected size.");
 		struct Transform {
 			mat4 CLIP_FROM_LOCAL;
 			mat4 WORLD_FROM_LOCAL;
@@ -108,6 +110,46 @@ struct Render : RTG::Application {
 		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
 		void destroy(RTG&);
 	}objects_pipeline;
+
+	struct EnvironmentPipeline {
+		//descriptor set layouts:
+		VkDescriptorSetLayout set0_World = VK_NULL_HANDLE;
+		VkDescriptorSetLayout set1_Transforms = VK_NULL_HANDLE;
+		VkDescriptorSetLayout set2_TEXTURE = VK_NULL_HANDLE;
+
+		//types for descriptors:
+
+		//no push constants
+
+		VkPipelineLayout layout = VK_NULL_HANDLE;
+
+		using Vertex = PosNorTanTexVertex;
+
+		VkPipeline handle = VK_NULL_HANDLE;
+
+		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
+		void destroy(RTG&);
+	} environment_pipeline;
+
+	struct MirrorPipeline {
+		//descriptor set layouts:
+		VkDescriptorSetLayout set0_World = VK_NULL_HANDLE;
+		VkDescriptorSetLayout set1_Transforms = VK_NULL_HANDLE;
+		VkDescriptorSetLayout set2_TEXTURE = VK_NULL_HANDLE;
+
+		//types for descriptors same as objects pipeline
+
+		//no push constants
+
+		VkPipelineLayout layout = VK_NULL_HANDLE;
+
+		using Vertex = PosNorTanTexVertex;
+
+		VkPipeline handle = VK_NULL_HANDLE;
+
+		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
+		void destroy(RTG&);
+	} mirror_pipeline;
 
 	//pools from which per-workspace things are allocated:
 	VkCommandPool command_pool = VK_NULL_HANDLE;
@@ -150,6 +192,10 @@ struct Render : RTG::Application {
 
 	std::vector<ObjectVertices> mesh_vertices;
 	std::vector<AABB> mesh_AABBs;
+
+	Helpers::AllocatedImage World_environment;
+	VkImageView World_environment_view = VK_NULL_HANDLE;
+	VkSampler World_environment_sampler = VK_NULL_HANDLE;
 
 	std::vector <Helpers::AllocatedImage> textures;
 	std::vector < VkImageView > texture_views;
@@ -217,13 +263,25 @@ struct Render : RTG::Application {
 
 	ObjectsPipeline::World world;
 
-	struct ObjectInstance {
+	struct LambertianInstance {
 		ObjectVertices vertices;
-		ObjectsPipeline::Transform transform;
+		Transform transform;
 		uint32_t texture = 0;
 	};
 
-	std::vector < ObjectInstance > object_instances;
+	std::vector< LambertianInstance > lambertian_instances;
+
+	struct EnvironmentInstance {
+		ObjectVertices vertices;
+		Transform transform;
+	};
+	std::vector< EnvironmentInstance > environment_instances;
+
+	struct MirrorInstance {
+		ObjectVertices vertices;
+		Transform transform;
+	};
+	std::vector< MirrorInstance > mirror_instances;
 
 	//-------------------------------------
 	void set_animation_time(float t);

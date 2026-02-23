@@ -1,6 +1,7 @@
 #include "Render.hpp"
 
 #include "VK.hpp"
+#include "rgbe.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../Lib/stb/stb_image.h"
@@ -17,9 +18,11 @@
 
 #include <deque>
 
-Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
+Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 	//select a depth format:
 	//at least on of these two must be supported, arrourding to the spec; but neihet are required
+	static std::unique_ptr< Timer > timer;
+	timer.reset(new Timer([](double dt) { std::cout << "REPORT frame-time " << dt * 1000.0 << "ms" << std::endl; }));
 
 	depth_format = rtg.helpers.find_image_format(
 		{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_X8_D24_UNORM_PACK32 },
@@ -52,7 +55,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 				.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 			},
 		};
-		
+
 		//subpasses
 		VkAttachmentReference color_attachment_ref{
 		.attachment = 0,
@@ -90,7 +93,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 				.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 				.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
 				.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-		}};
+		} };
 
 		VkRenderPassCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -116,22 +119,112 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 	background_pipeline.create(rtg, render_pass, 0);
 	lines_pipeline.create(rtg, render_pass, 0);
 	objects_pipeline.create(rtg, render_pass, 0);
+	environment_pipeline.create(rtg, render_pass, 0);
+	mirror_pipeline.create(rtg, render_pass, 0);
+
+
+
+	//create environment texture
+	if (scene.environment.source != "") {
+		int width, height, n;
+		unsigned char* image;
+		image = stbi_load((scene.scene_path + "/" + scene.environment.source).c_str(), &width, &height, &n, 4);
+		if (image == NULL) throw std::runtime_error("Error loading texture " + scene.scene_path + "/" + scene.environment.source);
+		// cube map must have 6 sides and stacked vertically
+		if (height % 6 != 0 || width != height / 6) {
+			throw std::runtime_error("Invalid image dimensions for a cubemap");
+		}
+
+		int face_length = width;
+
+		// convert rgbe to rgb values
+		std::vector<glm::vec4> rgb_image(width * height); // Store the converted RGB data
+
+		for (int i = 0; i < width * height; ++i) {
+			glm::u8vec4 rgbe_pixel = glm::u8vec4(image[4 * i], image[4 * i + 1], image[4 * i + 2], image[4 * i + 3]);
+			rgb_image[i] = rgbe_to_float(rgbe_pixel);
+		}
+
+		World_environment = rtg.helpers.create_image(
+			VkExtent2D{ .width = uint32_t(face_length), .height = uint32_t(face_length) }, // size of each face
+			VK_FORMAT_R8G8B8A8_UNORM,
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			Helpers::Unmapped, 6
+		);
+
+		rtg.helpers.transfer_to_image_cube(image, 4 * width * height, World_environment);
+
+		//free image:
+		stbi_image_free(image);
+
+		{//make image view for environment
+
+			VkImageViewCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+				.flags = 0,
+				.image = World_environment.handle,
+				.viewType = VK_IMAGE_VIEW_TYPE_CUBE,
+				.format = World_environment.format,
+				// .components sets swizzling and is fine when zero-initialized
+				.subresourceRange{
+					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					.baseMipLevel = 0,
+					.levelCount = 1,
+					.baseArrayLayer = 0,
+					.layerCount = 6,
+				},
+			};
+
+			VK(vkCreateImageView(rtg.device, &create_info, nullptr, &World_environment_view));
+		}
+
+		{//make a sampler for the environment
+			VkSamplerCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+				.flags = 0,
+				.magFilter = VK_FILTER_LINEAR,
+				.minFilter = VK_FILTER_LINEAR,
+				.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+				.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+				.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+				.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+				.mipLodBias = 0.0f,
+				.anisotropyEnable = VK_FALSE,
+				.maxAnisotropy = 0.0f, //doesn't matter if anisotropy isn't enabled
+				.compareEnable = VK_FALSE,
+				.compareOp = VK_COMPARE_OP_ALWAYS, //doesn't matter if compare isn't enabled
+				.minLod = 0.0f,
+				.maxLod = 0.0f,
+				.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+				.unnormalizedCoordinates = VK_FALSE,
+			};
+			VK(vkCreateSampler(rtg.device, &create_info, nullptr, &World_environment_sampler));
+		}
+	}
+
 
 	{//create descriptor pool:
 		uint32_t per_workspace = uint32_t(rtg.workspaces.size()); //for easier to read counting
 
-		std::array < VkDescriptorPoolSize, 2> pool_sizes{
+		std::array < VkDescriptorPoolSize, 3> pool_sizes{
 
 			VkDescriptorPoolSize{ //union buffer desciptors
 				.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				.descriptorCount = 2 * per_workspace, //one descriptor per set, one set per workspace
 			},
 			VkDescriptorPoolSize{
+				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1 * per_workspace, //one descriptoper set, one set per workspace
+			},
+			VkDescriptorPoolSize{
 				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 				.descriptorCount = 1 * per_workspace, //one descriptoper set, one set per workspace
 			},
+			
 		};
-		
+
 		VkDescriptorPoolCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
 			.flags = 0, // because CCREATE_FREE_DESCRIPTOR_SET_BIT isin;t include , we can't free individual descript allocated for this pool
@@ -143,8 +236,9 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 		VK(vkCreateDescriptorPool(rtg.device, &create_info, nullptr, &descriptor_pool));
 	}
 
+
 	workspaces.resize(rtg.workspaces.size());
-	for (Workspace &workspace : workspaces) {
+	for (Workspace& workspace : workspaces) {
 		{ //allocate command buffer:
 			VkCommandBufferAllocateInfo alloc_info{
 				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -218,7 +312,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.Transforms_descriptors));
 		}
-		
+
 		{// point descript to Camera buffer:
 			VkDescriptorBufferInfo Camera_info{
 				.buffer = workspace.Camera.handle,
@@ -231,8 +325,14 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 				.offset = 0,
 				.range = workspace.World.size,
 			};
+			VkDescriptorImageInfo World_environment_info{
+				.sampler = World_environment_sampler,
+				.imageView = World_environment_view,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			};
 
-			std::array < VkWriteDescriptorSet, 2> writes{
+
+			std::array < VkWriteDescriptorSet, 3> writes{
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = workspace.Camera_descriptors,
@@ -251,6 +351,15 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 					.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 					.pBufferInfo = &World_info,
 				},
+				VkWriteDescriptorSet{
+					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.dstSet = workspace.World_descriptors,
+					.dstBinding = 1,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pBufferInfo = &World_environment_info,
+				},
 			};
 
 			vkUpdateDescriptorSets(
@@ -261,173 +370,174 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 				nullptr  //pDescriptorCopies
 			);
 		}
-	}
 
-	{//create object vertices 
-		std::vector < PosNorTanTexVertex > vertices;
 
-		//reserve space and assign vao vbo via scene information
-		vertices.resize(scene.vertices_count);
-		uint32_t new_vertices_start = 0;
-		size_t mesh_count = scene.meshes.size();
-		mesh_vertices.assign(mesh_count, ObjectVertices());
-		mesh_AABBs.assign(scene.meshes.size(), AABB());
+		{//create object vertices 
+			std::vector < PosNorTanTexVertex > vertices;
 
-		//create meshes 
-		for (uint32_t i = 0; i < uint32_t(mesh_count); ++i)
-		{
-			Scene::Mesh& cur_mesh = scene.meshes[i];
-			mesh_vertices[i].count = cur_mesh.count;
-			mesh_vertices[i].first = new_vertices_start;
+			//reserve space and assign vao vbo via scene information
+			vertices.resize(scene.vertices_count);
+			uint32_t new_vertices_start = 0;
+			size_t mesh_count = scene.meshes.size();
+			mesh_vertices.assign(mesh_count, ObjectVertices());
+			mesh_AABBs.assign(scene.meshes.size(), AABB());
 
-			//find mesh source via filepath
-			std::ifstream file(scene.scene_path + "/" + cur_mesh.attributes[0].source, std::ios::binary); // assuming the attribute layout holds
-			if (!file.is_open())
-				throw std::runtime_error("Error opening file for mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
-			if (!file.read(reinterpret_cast<char*>(&vertices[new_vertices_start]), cur_mesh.count * sizeof(PosNorTanTexVertex)))
+			//create meshes 
+			for (uint32_t i = 0; i < uint32_t(mesh_count); ++i)
 			{
-				throw std::runtime_error("Failed to read mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
-			}
+				Scene::Mesh& cur_mesh = scene.meshes[i];
+				mesh_vertices[i].count = cur_mesh.count;
+				mesh_vertices[i].first = new_vertices_start;
 
-			//find OOB and create mesh ABBS
-			for (size_t vertex_i = mesh_vertices[i].first; vertex_i < (mesh_vertices[i].first + mesh_vertices[i].count); ++vertex_i) {
-				glm::vec3 cur_vert_pos = { vertices[vertex_i].Position.x, vertices[vertex_i].Position.y, vertices[vertex_i].Position.z };
-				mesh_AABBs[i].min = glm::min(mesh_AABBs[i].min, cur_vert_pos);
-				mesh_AABBs[i].max = glm::max(mesh_AABBs[i].max, cur_vert_pos);
-			}
-			new_vertices_start += cur_mesh.count;
-		}
-		assert(new_vertices_start == scene.vertices_count);
-
-		size_t bytes = vertices.size() * sizeof(vertices[0]);
-		object_vertices = rtg.helpers.create_buffer(
-			bytes,
-			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			Helpers::Unmapped
-		);
-
-		//copy data to buffer
-		rtg.helpers.transfer_to_buffer(vertices.data(), bytes, object_vertices);
-	}
-
-	{/// Create texture
-
-		//correct texture loading 
-		stbi_set_flip_vertically_on_load(true);
-		textures.reserve(scene.textures.size() + 1); // index 0 is the default texture
-		{ // texture 0 = default material
-			uint8_t data[4] = { 255, 255, 255, 255 };
-			// make a place for the texture to live on the GPU
-			textures.emplace_back(rtg.helpers.create_image(
-				VkExtent2D{ .width = 1, .height = 1 }, //siz eof image
-				VK_FORMAT_R8G8B8A8_UNORM, //HOW TO INTERPRET IMAGE DATA(in this case, linearly -encode * -bit RGBA
-				VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sapmle and uplaod
-				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,	//should be device local
-				Helpers::Unmapped
-			));
-			//transfer data
-			rtg.helpers.transfer_to_image(data, sizeof(uint8_t) * 4, textures.back());
-		}
-
-		//create scene textures
-		for (uint32_t i = 0; i < scene.textures.size(); ++i)
-		{
-			Scene::Texture& cur_texture = scene.textures[i];
-			if (cur_texture.has_src)
-			{
-				int width, height, n;
-				unsigned char* image = stbi_load((scene.scene_path + "/" + cur_texture.source).c_str(), &width, &height, &n, 4);
-				if (image == NULL)
-					throw std::runtime_error("Error loading texture " + scene.scene_path + cur_texture.source);
-				
-				// make a place for the texture to live on the GPU:
-				textures.emplace_back(rtg.helpers.create_image(
-					VkExtent2D{ .width = uint32_t(width), .height = uint32_t(height) }, // size of image
-					VK_FORMAT_R8G8B8A8_UNORM,										  // how to interpret image data (in this case, linearly-encoded 8-bit RGBA) TODO: double check format
-					VK_IMAGE_TILING_OPTIMAL,
-					VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
-					Helpers::Unmapped));
-				// transfer data:
-				std::cout << width << ", " << height << ", " << n << std::endl;
-				rtg.helpers.transfer_to_image(image, sizeof(image[0]) * width * height * 4, textures.back());
-				// free image:
-				stbi_image_free(image);
-			}
-			else
-			{
-				uint8_t data[4] = { uint8_t(cur_texture.value.x * 255.0f), uint8_t(cur_texture.value.y * 255.0f), uint8_t(cur_texture.value.z * 255.0f), 255 };
-				// make a place for the texture to live on the GPU:
-				textures.emplace_back(rtg.helpers.create_image(
-					VkExtent2D{ .width = 1, .height = 1 }, // size of image
-					VK_FORMAT_R8G8B8A8_UNORM,  // how to interpret image data (in this case, SRGB-encoded 8-bit RGBA)
-					VK_IMAGE_TILING_OPTIMAL,
-					VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
-					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
-					Helpers::Unmapped));
-
-				// transfer data:
-				rtg.helpers.transfer_to_image(&data, sizeof(uint8_t) * 4, textures.back());
-			}
-		}
-	
-	}
-
-	{ //make image views for the texture
-		texture_views.reserve(textures.size());
-		for (Helpers::AllocatedImage const& image : textures) {
-			VkImageViewCreateInfo create_info{
-				.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-				.flags = 0,
-				.image = image.handle,
-				.viewType = VK_IMAGE_VIEW_TYPE_2D,
-				.format = image.format,
-				// .componet set swizling and is fine when zero-initialied 
-				.subresourceRange{
-					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-					.baseMipLevel = 0,
-					.levelCount = 1,
-					.baseArrayLayer = 0,
-					.layerCount = 1,
+				//find mesh source via filepath
+				std::ifstream file(scene.scene_path + "/" + cur_mesh.attributes[0].source, std::ios::binary); // assuming the attribute layout holds
+				if (!file.is_open())
+					throw std::runtime_error("Error opening file for mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
+				if (!file.read(reinterpret_cast<char*>(&vertices[new_vertices_start]), cur_mesh.count * sizeof(PosNorTanTexVertex)))
+				{
+					throw std::runtime_error("Failed to read mesh data: " + scene.scene_path + "/" + cur_mesh.attributes[0].source);
 				}
+
+				//find OOB and create mesh ABBS
+				for (size_t vertex_i = mesh_vertices[i].first; vertex_i < (mesh_vertices[i].first + mesh_vertices[i].count); ++vertex_i) {
+					glm::vec3 cur_vert_pos = { vertices[vertex_i].Position.x, vertices[vertex_i].Position.y, vertices[vertex_i].Position.z };
+					mesh_AABBs[i].min = glm::min(mesh_AABBs[i].min, cur_vert_pos);
+					mesh_AABBs[i].max = glm::max(mesh_AABBs[i].max, cur_vert_pos);
+				}
+				new_vertices_start += cur_mesh.count;
+			}
+			assert(new_vertices_start == scene.vertices_count);
+
+			size_t bytes = vertices.size() * sizeof(vertices[0]);
+			object_vertices = rtg.helpers.create_buffer(
+				bytes,
+				VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				Helpers::Unmapped
+			);
+
+			//copy data to buffer
+			rtg.helpers.transfer_to_buffer(vertices.data(), bytes, object_vertices);
+		}
+
+		{/// Create texture
+			// all images loaded should be flipped as s72 file format has the image origin at bottom left while stbi load is top left
+			stbi_set_flip_vertically_on_load(true);
+
+			//correct texture loading 
+			textures.reserve(scene.textures.size() + 1); // index 0 is the default texture
+			{ // texture 0 = default material
+				uint8_t data[4] = { 255, 255, 255, 255 };
+				// make a place for the texture to live on the GPU
+				textures.emplace_back(rtg.helpers.create_image(
+					VkExtent2D{ .width = 1, .height = 1 }, //siz eof image
+					VK_FORMAT_R8G8B8A8_UNORM, //HOW TO INTERPRET IMAGE DATA(in this case, linearly -encode * -bit RGBA
+					VK_IMAGE_TILING_OPTIMAL,
+					VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, //will sapmle and uplaod
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,	//should be device local
+					Helpers::Unmapped
+				));
+				//transfer data
+				rtg.helpers.transfer_to_image(data, sizeof(uint8_t) * 4, textures.back());
+			}
+
+			//create scene textures
+			for (uint32_t i = 0; i < scene.textures.size(); ++i)
+			{
+				Scene::Texture& cur_texture = scene.textures[i];
+				if (cur_texture.has_src)
+				{
+					int width, height, n;
+					unsigned char* image = stbi_load((scene.scene_path + "/" + cur_texture.source).c_str(), &width, &height, &n, 4);
+					if (image == NULL)
+						throw std::runtime_error("Error loading texture " + scene.scene_path + cur_texture.source);
+
+					// make a place for the texture to live on the GPU:
+					textures.emplace_back(rtg.helpers.create_image(
+						VkExtent2D{ .width = uint32_t(width), .height = uint32_t(height) }, // size of image
+						VK_FORMAT_R8G8B8A8_UNORM,										  // how to interpret image data (in this case, linearly-encoded 8-bit RGBA) TODO: double check format
+						VK_IMAGE_TILING_OPTIMAL,
+						VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
+						Helpers::Unmapped));
+					// transfer data:
+					std::cout << width << ", " << height << ", " << n << std::endl;
+					rtg.helpers.transfer_to_image(image, sizeof(image[0]) * width * height * 4, textures.back());
+					// free image:
+					stbi_image_free(image);
+				}
+				else
+				{
+					uint8_t data[4] = { uint8_t(cur_texture.value.x * 255.0f), uint8_t(cur_texture.value.y * 255.0f), uint8_t(cur_texture.value.z * 255.0f), 255 };
+					// make a place for the texture to live on the GPU:
+					textures.emplace_back(rtg.helpers.create_image(
+						VkExtent2D{ .width = 1, .height = 1 }, // size of image
+						VK_FORMAT_R8G8B8A8_UNORM,  // how to interpret image data (in this case, SRGB-encoded 8-bit RGBA)
+						VK_IMAGE_TILING_OPTIMAL,
+						VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, // will sample and upload
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,						  // should be device-local
+						Helpers::Unmapped));
+
+					// transfer data:
+					rtg.helpers.transfer_to_image(&data, sizeof(uint8_t) * 4, textures.back());
+				}
+			}
+
+		}
+
+		{ //make image views for the texture
+			texture_views.reserve(textures.size());
+			for (Helpers::AllocatedImage const& image : textures) {
+				VkImageViewCreateInfo create_info{
+					.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+					.flags = 0,
+					.image = image.handle,
+					.viewType = VK_IMAGE_VIEW_TYPE_2D,
+					.format = image.format,
+					// .componet set swizling and is fine when zero-initialied 
+					.subresourceRange{
+						.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+						.baseMipLevel = 0,
+						.levelCount = 1,
+						.baseArrayLayer = 0,
+						.layerCount = 1,
+					}
+				};
+
+				VkImageView image_view = VK_NULL_HANDLE;
+				VK(vkCreateImageView(rtg.device, &create_info, nullptr, &image_view));
+
+				texture_views.emplace_back(image_view);
+			}
+			assert(texture_views.size() == textures.size());
+		}
+
+		{//make sampler for the textures
+			VkSamplerCreateInfo create_info{
+				.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+				.flags = 0,
+				.magFilter = VK_FILTER_NEAREST,
+				.minFilter = VK_FILTER_NEAREST,
+				.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+				.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+				.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+				.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+				.mipLodBias = 0.0f,
+				.anisotropyEnable = VK_FALSE,
+				.maxAnisotropy = 0.0f, //doesn't matter if anisotropy ins't enabled
+				.compareEnable = VK_FALSE,
+				.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled 
+				.minLod = 0.0f,
+				.maxLod = 0.0f ,
+				.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+				.unnormalizedCoordinates = VK_FALSE,
 			};
 
-			VkImageView image_view = VK_NULL_HANDLE;
-			VK(vkCreateImageView(rtg.device, &create_info, nullptr, &image_view));
-
-			texture_views.emplace_back(image_view);
+			VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
 		}
-		assert(texture_views.size() == textures.size());
-	}
 
-	{//make sampler for the textures
-		VkSamplerCreateInfo create_info{
-			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-			.flags = 0,
-			.magFilter = VK_FILTER_NEAREST,
-			.minFilter = VK_FILTER_NEAREST,
-			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-			.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-			.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-			.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-			.mipLodBias = 0.0f,
-			.anisotropyEnable = VK_FALSE,
-			.maxAnisotropy = 0.0f, //doesn't matter if anisotropy ins't enabled
-			.compareEnable = VK_FALSE,
-			.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled 
-			.minLod = 0.0f,
-			.maxLod = 0.0f ,
-			.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-			.unnormalizedCoordinates = VK_FALSE,
-		};
+		{//create the texture descirptor pool
 
-		VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
-	}
-
-	{//create the texture descirptor pool
-		
 			uint32_t per_texture = uint32_t(textures.size()); //for easier to read counting
 
 			std::array < VkDescriptorPoolSize, 1> pool_sizes{
@@ -447,140 +557,140 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_) , scene(scene_) {
 			};
 
 			VK(vkCreateDescriptorPool(rtg.device, &create_info, nullptr, &texture_descriptor_pool));
-	}
-
-	{//allocate and write the texture descriptor sets
-		//Allocate and write the texture descriptor sets
-		VkDescriptorSetAllocateInfo alloc_info{
-			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-			.descriptorPool = texture_descriptor_pool,
-			.descriptorSetCount = 1,
-			.pSetLayouts = &objects_pipeline.set2_TEXTURE,
-		};
-		texture_descriptors.assign(textures.size(), VK_NULL_HANDLE);
-
-		for (VkDescriptorSet& descriptor_set : texture_descriptors) {
-			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &descriptor_set));
 		}
 
-		//write descptor for textures 
-		std::vector < VkDescriptorImageInfo > infos(textures.size());
-		std::vector < VkWriteDescriptorSet > writes(textures.size());
-
-		for (Helpers::AllocatedImage const& image : textures) {
-			size_t i = &image - &textures[0];
-
-			infos[i] = VkDescriptorImageInfo{
-				.sampler = texture_sampler,
-				.imageView = texture_views[i],
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		{//allocate and write the texture descriptor sets
+			//Allocate and write the texture descriptor sets
+			VkDescriptorSetAllocateInfo alloc_info{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.descriptorPool = texture_descriptor_pool,
+				.descriptorSetCount = 1,
+				.pSetLayouts = &objects_pipeline.set2_TEXTURE,
 			};
+			texture_descriptors.assign(textures.size(), VK_NULL_HANDLE);
 
-			writes[i] = VkWriteDescriptorSet{
-				.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-				.dstSet = texture_descriptors[i],
-				.dstBinding = 0,
-				.dstArrayElement = 0,
-				.descriptorCount = 1,
-				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.pImageInfo = &infos[i],
-			};
-		}
-
-		vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
-	}
-	{ // setup camera if no --camera in the command line, scene camera is set in update
-		if (!rtg_.configuration.scene_camera.has_value())
-		{
-			float x = user_camera.radius * std::sin(user_camera.elevation) * std::cos(user_camera.azimuth);
-			float y = user_camera.radius * std::sin(user_camera.elevation) * std::sin(user_camera.azimuth);
-			float z = user_camera.radius * std::cos(user_camera.elevation);
-			// cache culling view
-			// cache view and clip matrices
-			view_from_world[1] = glm::make_mat4(look_at(
-				x, y, z,		  // eye
-				0.0f, 0.0f, 0.0f, // target
-				0.0f, 0.0f, 1.0f  // up
-			).data());
-
-			clip_from_view[1] = glm::make_mat4(perspective(
-				60.0f * float(M_PI) / 180.0f,									// vfov
-				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-				0.1f,															// near
-				1000.0f															// far
-			).data());
-
-			view_from_world[2] = view_from_world[1];
-			clip_from_view[2] = clip_from_view[1];
-			glm::mat4x4 clip = clip_from_view[1] * view_from_world[1];
-			CLIP_FROM_WORLD = to_mat4(clip);
-
-			camera_mode = CameraMode::Free;
-			culling_camera = CameraMode::Free;
-		}
-		else
-		{
-			Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
-			glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.local_to_parent();
-			for (int i = 1; i < cur_camera.local_to_world.size(); ++i)
-			{
-				cur_camera_transform *= scene.nodes[cur_camera.local_to_world[i]].transform.local_to_parent();
+			for (VkDescriptorSet& descriptor_set : texture_descriptors) {
+				VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &descriptor_set));
 			}
-			glm::vec3 eye = glm::vec3(cur_camera_transform[3]);
-			glm::vec3 forward = -glm::vec3(cur_camera_transform[2]);
-			glm::vec3 target = eye + forward;
 
-			view_from_world[0] = glm::make_mat4(look_at(
-				eye.x, eye.y, eye.z,		  // eye
-				target.x, target.y, target.z, // target
-				0.0f, 0.0f, 1.0f			  // up
-			).data());
+			//write descptor for textures 
+			std::vector < VkDescriptorImageInfo > infos(textures.size());
+			std::vector < VkWriteDescriptorSet > writes(textures.size());
 
-			clip_from_view[0] = glm::make_mat4((perspective(
-				cur_camera.vfov,   // vfov
-				cur_camera.aspect, // aspect
-				cur_camera.near,   // near
-				cur_camera.far	   // far
-			) *
-				look_at(
+			for (Helpers::AllocatedImage const& image : textures) {
+				size_t i = &image - &textures[0];
+
+				infos[i] = VkDescriptorImageInfo{
+					.sampler = texture_sampler,
+					.imageView = texture_views[i],
+					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				};
+
+				writes[i] = VkWriteDescriptorSet{
+					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.dstSet = texture_descriptors[i],
+					.dstBinding = 0,
+					.dstArrayElement = 0,
+					.descriptorCount = 1,
+					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+					.pImageInfo = &infos[i],
+				};
+			}
+
+			vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
+		}
+		{ // setup camera if no --camera in the command line, scene camera is set in update
+			if (!rtg_.configuration.scene_camera.has_value())
+			{
+				float x = user_camera.radius * std::sin(user_camera.elevation) * std::cos(user_camera.azimuth);
+				float y = user_camera.radius * std::sin(user_camera.elevation) * std::sin(user_camera.azimuth);
+				float z = user_camera.radius * std::cos(user_camera.elevation);
+				// cache culling view
+				// cache view and clip matrices
+				view_from_world[1] = glm::make_mat4(look_at(
+					x, y, z,		  // eye
+					0.0f, 0.0f, 0.0f, // target
+					0.0f, 0.0f, 1.0f  // up
+				).data());
+
+				clip_from_view[1] = glm::make_mat4(perspective(
+					60.0f * float(M_PI) / 180.0f,									// vfov
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+					0.1f,															// near
+					1000.0f															// far
+				).data());
+
+				view_from_world[2] = view_from_world[1];
+				clip_from_view[2] = clip_from_view[1];
+				glm::mat4x4 clip = clip_from_view[1] * view_from_world[1];
+				CLIP_FROM_WORLD = to_mat4(clip);
+
+				camera_mode = CameraMode::Free;
+				culling_camera = CameraMode::Free;
+			}
+			else
+			{
+				Scene::Camera& cur_camera = scene.cameras[scene.requested_camera_index];
+				glm::mat4x4 cur_camera_transform = scene.nodes[cur_camera.local_to_world[0]].transform.local_to_parent();
+				for (int i = 1; i < cur_camera.local_to_world.size(); ++i)
+				{
+					cur_camera_transform *= scene.nodes[cur_camera.local_to_world[i]].transform.local_to_parent();
+				}
+				glm::vec3 eye = glm::vec3(cur_camera_transform[3]);
+				glm::vec3 forward = -glm::vec3(cur_camera_transform[2]);
+				glm::vec3 target = eye + forward;
+
+				view_from_world[0] = glm::make_mat4(look_at(
 					eye.x, eye.y, eye.z,		  // eye
 					target.x, target.y, target.z, // target
 					0.0f, 0.0f, 1.0f			  // up
-				)).data());
+				).data());
 
-			clip_from_view[1] = glm::make_mat4(perspective(
-				60.0f * float(M_PI) / 180.0f,									// vfov
+				clip_from_view[0] = glm::make_mat4((perspective(
+					cur_camera.vfov,   // vfov
+					cur_camera.aspect, // aspect
+					cur_camera.near,   // near
+					cur_camera.far	   // far
+				) *
+					look_at(
+						eye.x, eye.y, eye.z,		  // eye
+						target.x, target.y, target.z, // target
+						0.0f, 0.0f, 1.0f			  // up
+					)).data());
+
+				clip_from_view[1] = glm::make_mat4(perspective(
+					60.0f * float(M_PI) / 180.0f,									// vfov
+					rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
+					0.1f,															// near
+					1000.0f															// far
+				).data());
+
+				scene_cam_frustum = make_frustum(
+					cur_camera.vfov,   // vfov
+					cur_camera.aspect, // aspect
+					cur_camera.near,   // near
+					cur_camera.far	   // far
+				);
+
+				clip_from_view[2] = clip_from_view[1];
+
+				glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
+				CLIP_FROM_WORLD = to_mat4(clip);
+
+				camera_mode = CameraMode::Scene;
+				culling_camera = CameraMode::Scene;
+
+			}
+
+			user_cam_frustum = make_frustum(
+				60.0f * float(M_PI) / 180.0f,									 // vfov
 				rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-				0.1f,															// near
-				1000.0f															// far
-			).data());
-
-			scene_cam_frustum = make_frustum(
-				cur_camera.vfov,   // vfov
-				cur_camera.aspect, // aspect
-				cur_camera.near,   // near
-				cur_camera.far	   // far
+				0.1f,															 // near
+				1000.0f															 // far
 			);
-
-			clip_from_view[2] = clip_from_view[1];
-
-			glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
-			CLIP_FROM_WORLD = to_mat4(clip);
-
-			camera_mode = CameraMode::Scene;
-			culling_camera = CameraMode::Scene;
-			
 		}
-
-		user_cam_frustum = make_frustum(
-			60.0f * float(M_PI) / 180.0f,									 // vfov
-			rtg.swapchain_extent.width / float(rtg.swapchain_extent.height), // aspect
-			0.1f,															 // near
-			1000.0f															 // far
-		);
 	}
 }
-
 Render::~Render() {
 	//just in case rendering is still in flight, don't destroy resources:
 	//(not using VK macro to avoid throw-ing in destructor)
@@ -595,6 +705,20 @@ Render::~Render() {
 		//this also frees the descriptor sets allocated form the pool: 
 		texture_descriptors.clear();
 	}
+	if (World_environment_sampler) {
+		vkDestroySampler(rtg.device, World_environment_sampler, nullptr);
+		World_environment_sampler = VK_NULL_HANDLE;
+	}
+
+	if (World_environment_view) {
+		vkDestroyImageView(rtg.device, World_environment_view, nullptr);
+		World_environment_view = VK_NULL_HANDLE;
+	}
+
+	if (World_environment.handle) {
+		rtg.helpers.destroy_image(std::move(World_environment));
+	}
+
 
 	if (texture_sampler) {
 		vkDestroySampler(rtg.device, texture_sampler, nullptr);
@@ -665,6 +789,8 @@ Render::~Render() {
 	background_pipeline.destroy(rtg);
 	lines_pipeline.destroy(rtg);
 	objects_pipeline.destroy(rtg);
+	evironment_pipeline.destroy(rtg);
+	mirror_pipeline.destroy(rtg);
 
 	// DESTORY COMMAND POOL
 	if (command_pool != VK_NULL_HANDLE) {
@@ -843,7 +969,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 	}
 
 	{//upload world info
-		assert(workspace.Camera_src.size = sizeof(world));
+		assert(workspace.World_src.size == sizeof(world));
 
 		//host-side copy into Camera_src:
 		memcpy(workspace.World_src.allocation.data(), &world, sizeof(world));
@@ -860,9 +986,8 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 	}
 
-	if (!object_instances.empty()) { //upload obecjt transforms
-		//[re-]allocate lines buffers is need;
-		size_t needed_bytes = object_instances.size() * sizeof(ObjectsPipeline::Transform);
+	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty()) { //upload object transforms:
+		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size()) * sizeof(ObjectsPipeline::Transform);
 		if (workspace.Transforms_src.handle == VK_NULL_HANDLE ||
 			workspace.Transforms_src.size < needed_bytes) {
 			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
@@ -923,8 +1048,16 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			assert(workspace.Transforms_src.allocation.mapped);
 			ObjectsPipeline::Transform* out = reinterpret_cast<ObjectsPipeline::Transform * > (workspace.Transforms_src.allocation.data());
 			//strict aliasing violation, but it doesn't matter
-			for (ObjectInstance const& inst : object_instances) {
+			for (LambertianInstance const& inst : lambertian_instances) {
+				*out = inst.transform;
+				++out;
+			}
+			for (EnvironmentInstance const& inst : environment_instances) {
 				*out = inst.transform; 
+				++out;
+			}
+			for (MirrorInstance const& inst : mirror_instances) {
+				*out = inst.transform;
 				++out;
 			}
 		}
@@ -1019,20 +1152,20 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			}
 		}
 
-		//{//draw with the backgorun pipeline
-		//	vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, background_pipeline.handle);
-		//	
-		//	{//push time:
-		//		BackgroundPipeline::Push push{
-		//			.time = float(time),
-		//		};
-		//		vkCmdPushConstants(workspace.command_buffer, background_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
-		//	}
-		//	vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
-		//}
+		{//draw with the backgorun pipeline
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, background_pipeline.handle);
+			
+			{//push time:
+				BackgroundPipeline::Push push{
+					.time = float(time),
+				};
+				vkCmdPushConstants(workspace.command_buffer, background_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
+			}
+			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
+		}
 		
 
-		if(!object_instances.empty())
+		if(!lambertian_instances.empty())
 		{//draw with the object pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
 			
@@ -1069,8 +1202,8 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 
 			//draw all instaces 
-			for (ObjectInstance const& inst : object_instances) {
-				uint32_t index = uint32_t(&inst - &object_instances[0]);
+			for (LambertianInstance const& inst : lambertian_instances) {
+				uint32_t index = uint32_t(&inst - &lambertian_instances[0]);
 
 				//bind texture descriptor set:
 
@@ -1086,7 +1219,51 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
 			}
 		}
+		if (!environment_instances.empty()) {//draw with the objects pipeline:
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, environment_pipeline.handle);
 
+			{//use object_vertices (offset 0) as vertex buffer binding 0:
+				std::array<VkBuffer, 1>vertex_buffers{ object_vertices.handle };
+				std::array< VkDeviceSize, 1 > offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+
+			}
+
+			
+			//word descriptor set is still bound
+			//Camera descriptor set is still bound, but unused
+
+			//draw all instances:
+			uint32_t index_offset = uint32_t(lambertian_instances.size());// account for lambertian size
+			for (EnvironmentInstance const& inst : environment_instances) {
+				uint32_t index = uint32_t(&inst - &environment_instances[0]) + index_offset;
+
+				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+			}
+
+		}
+		if (!mirror_instances.empty()) {//draw with the objects pipeline:
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mirror_pipeline.handle);
+
+			{//use object_vertices as vertex buffer binding 0:
+				std::array<VkBuffer, 1>vertex_buffers{ object_vertices.handle };
+				std::array< VkDeviceSize, 1 > offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
+
+			//World descriptor still bound
+
+			//Camera descriptor set is still bound, but unused
+
+			//draw all instances:
+			uint32_t index_offset = uint32_t(lambertian_instances.size() + environment_instances.size());// account for lambertian and environment size
+			for (MirrorInstance const& inst : mirror_instances) {
+				uint32_t index = uint32_t(&inst - &mirror_instances[0]) + index_offset;
+
+				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+			}
+
+		}
 		if (!lines_vertices.empty())
 		{//draw with the lines pipeline;
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
@@ -1155,6 +1332,10 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 void Render::update(float dt) {
 	time = std::fmod(time + dt, 60.0f);
+	{
+		Timer timer([](double dt) { std::cout << "REPORT prep-work " << dt * 1000.0 << "ms" << std::endl; });
+	}
+	
 
 	{//update the animations according to the drivers
 		scene.animation_setting = rtg.configuration.animation_settings;
@@ -1277,6 +1458,7 @@ void Render::update(float dt) {
 		if (camera_mode == CameraMode::Scene) {
 			glm::mat4x4 clip = clip_from_view[0] * view_from_world[0];
 			CLIP_FROM_WORLD = to_mat4(clip);
+			world.CAMERA_POSITION = glm::vec4(eye, 1.0f);
 		}
 	}
 	if (camera_mode != CameraMode::Scene) {
@@ -1314,6 +1496,12 @@ void Render::update(float dt) {
 					user_camera.azimuth, user_camera.elevation, user_camera.radius
 				)
 					.data());
+
+				glm::vec3 eye = { user_camera.radius * std::cos(user_camera.elevation) * std::cos(user_camera.azimuth),
+									user_camera.radius * std::cos(user_camera.elevation) * std::sin(user_camera.azimuth),
+									user_camera.radius * std::sin(user_camera.elevation)
+				};
+				world.CAMERA_POSITION = glm::vec4(eye, 1.0f);
 			}
 			else if (camera_mode == CameraMode::Debug) {
 				CLIP_FROM_WORLD = perspective(
@@ -1346,7 +1534,14 @@ void Render::update(float dt) {
 					0.1f,															 // near
 					1000.0f															 // far
 				);
+				glm::vec3 eye = { debug_camera.radius * std::cos(debug_camera.elevation) * std::cos(debug_camera.azimuth),
+									debug_camera.radius * std::cos(debug_camera.elevation) * std::sin(debug_camera.azimuth),
+									debug_camera.radius * std::sin(debug_camera.elevation)
+				};
+				world.CAMERA_POSITION = glm::vec4(eye, 1.0f);
 			}
+
+
 		/*	last_aspect = float(rtg.swapchain_extent.width) / float(rtg.swapchain_extent.height);
 		}*/
 	}
@@ -1503,7 +1698,9 @@ void Render::update(float dt) {
 	
 	
 	{ // fill object instances with scene hiearchy
-		object_instances.clear();
+		lambertian_instances.clear();
+		environment_instances.clear();
+		mirror_instances.clear();
 
 		glm::mat4x4 frustum_view_from_world = culling_camera == CameraMode::Scene ? view_from_world[0] : view_from_world[1];
 
@@ -1659,20 +1856,55 @@ void Render::update(float dt) {
 					}
 						
 					uint32_t texture_index = 0;
-					if (scene.meshes[cur_mesh_index].material_index != -1)
-					{
-						texture_index = scene.materials[scene.meshes[cur_mesh_index].material_index].texture_index + 1;
-					}
+					if (scene.meshes[cur_mesh_index].material_index != -1) { /// has some material
+						const Scene::Material& cur_material = scene.materials[scene.meshes[cur_mesh_index].material_index];
+						if (cur_material.material_type == Scene::Material::MaterialType::Environment) {
+							environment_instances.emplace_back(EnvironmentInstance{
+							.vertices = mesh_vertices[cur_mesh_index],
+							.transform{
+								.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+								.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+								.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL_NORMAL,
+							},
+								});
+						}
+						else if (cur_material.material_type == Scene::Material::MaterialType::Mirror) {
+							mirror_instances.emplace_back(MirrorInstance{
+							.vertices = mesh_vertices[cur_mesh_index],
+							.transform{
+								.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+								.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+								.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL_NORMAL,
+							},
+								});
+						}
+						else if (cur_material.material_type == Scene::Material::MaterialType::Lambertian) {
+							lambertian_instances.emplace_back(LambertianInstance{
+								.vertices = mesh_vertices[cur_mesh_index],
+								.transform{
+									.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+									.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+									.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL_NORMAL,
+								},
+								.texture = texture_index,
+								});
+						}
+						else if (cur_material.material_type == Scene::Material::MaterialType::PBR) {
 
-					object_instances.emplace_back(ObjectInstance{
-						.vertices = mesh_vertices[cur_mesh_index],   // <-- ObjectVertices slice
+						}
+					}
+					else {
+						// use lambertian pipeline to render the default albedo, displacement and normal maps
+						lambertian_instances.emplace_back(LambertianInstance{
+						.vertices = mesh_vertices[cur_mesh_index],
 						.transform{
 							.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
 							.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
-							.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL,
+							.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL_NORMAL,
 						},
 						.texture = texture_index,
-						});
+							});
+					}
 
 					transform_stack.pop_back();
 				}

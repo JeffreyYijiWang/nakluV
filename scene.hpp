@@ -6,7 +6,7 @@
 #include <vector>
 #include <optional>
 #include <map>
-
+#include <>
 /**
  * Loads from .s72 format and manages a hierarchy of transformations.
  */
@@ -24,20 +24,29 @@ struct Scene {
 
 
     struct Texture {
-        std::string source = "";
-        glm::vec3 value;
-        bool is_2D = true;
+        std::variant<float, glm::vec3, std::string> value;
+        bool is_2D = true; //if false, environment cube
         bool has_src = false;
-        /*enum Vkformat  optional format
+        enum Vkformat
         {
             Linear = 0,
             SRGB= 1,
             RGBE = 2,
-        } format = Linear;*/
+        } format = VKformat::Linear;
 
-        Texture(std::string source_) : source(source_), is_2D(true), has_src(true) {};
-        Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false) {};
-        Texture() : value({ 1,1,1 }), is_2D(true), has_src(false) {};
+        Texture(std::string value_, bool single_channel_) : value(value_), is_2D(true), has_src(true), single_channel(single_channel_) {};
+        Texture(float value_) : value(value_), is_2D(true), has_src(false), single_channel(true) {};
+        Texture(std::string value_) : value(value_), is_2D(true), has_src(true), single_channel(false) {};
+        Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false), single_channel(false) {};
+        Texture() : value(glm::vec3{ 1,1,1 }), is_2D(true), has_src(false), single_channel(false) {};
+
+        enum struct DefaultTexture : uint8_t {
+            DefaultAlbedo = 0,
+            DefaultRoughness = 1,
+            DefaultMetalness = 2,
+            DefaultNormal = 3,
+            DefaultDisplacement = 4,
+        };
     };
 
     struct Material {
@@ -80,13 +89,17 @@ struct Scene {
         std::vector<uint32_t> local_to_world; // index 0 is root node - list of node indices to get from local to world 
     };
 
+    struct Environment {
+        std::string name;
+        std::string source = "";
+    };
     struct Node {
         std::string name;
         Transform transform;
         std::vector<uint32_t> children; // list of children, OPTOMIZE?
         int32_t cameras_index = -1;
         int32_t mesh_index = -1;
-        // int32_t environment = -1; 
+        int32_t environment = -1; 
         int32_t light_index = -1;
     };
 

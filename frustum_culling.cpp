@@ -27,7 +27,6 @@ OBB AABB_transform_to_OBB(const glm::mat4x4& transform_mat, const AABB& aabb)
     glm::vec3 corners[4];
 
     // Transform corners
-    // Note: I think this approach is only sufficient if our transform is non-shearing (affine)
     for (size_t corner_idx = 0; corner_idx < 4; corner_idx++) {
         glm::vec4 point = (transform_mat * corners_aabb[corner_idx]);
         corners[corner_idx] = { point.x, point.y, point.z };

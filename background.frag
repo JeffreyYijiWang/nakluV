@@ -8,20 +8,13 @@ layout(push_constant) uniform Push{
 };
 
 void main() {
-	//https://registry.khronos.org/OpenGL-Refpages/gl4/html/length.xhtml
-	/*if((mod ((length(position - vec2(0.5, 0.5)) +time ) ,(0.5) ))< 0.2){
-		outColor  = vec4(fract(position.x), 0.0, position.y, 1.0);
-	}
-	else if((mod ((length(position - vec2(0.5, 0.5)) +time ) ,(0.5) ))< 0.3){
-		outColor  = vec4(0.5, cos(position.y + time *2), sin(position.x + time *2), 1.0);
-	}
-
-	else{
-		outColor  = vec4(mod(length(position)+time/2, 0.1), 0.0, 0.0, 1.0);
-	}*/
-	
+	float norm;
+	for (int i = 0; i < 1000; ++i) {
+        norm= sin(position.y + float(i) + time);
+        norm= cos(position.x + float(i) - time);
+    }
 	
 	//= vec4(fract(position.x + time), position.y, 0.0, 1.0);
-	outColor = vec4(position,  0.0, 1.0);
+	outColor = vec4(0.0, 0.0,  0.0, 1.0);
 	//vec4(fract(gl_FragCoord.x/100), gl_FragCoord.y/400, 0.2, 1.0);
 }
