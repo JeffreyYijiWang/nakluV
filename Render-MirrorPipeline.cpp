@@ -11,7 +11,7 @@ static uint32_t frag_code[] =
 #include "spv/mirror.frag.inl"
 ;
 
-void Render::MirrorPipeline:::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
+void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
 	VkShaderModule vert_module = rtg.helpers.create_shader_module(vert_code);
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
@@ -60,7 +60,7 @@ void Render::MirrorPipeline:::create(RTG& rtg, VkRenderPass render_pass, uint32_
 	}
 
 	{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
-		std::array< VkDescriptorSetLayoutBinding, 2> bindings{
+		std::array< VkDescriptorSetLayoutBinding, 3> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -92,24 +92,18 @@ void Render::MirrorPipeline:::create(RTG& rtg, VkRenderPass render_pass, uint32_
 
 
 	{ //create pipline layout
-		std::array < VkDescriptorSetLayout, 2> layouts{
+		std::array < VkDescriptorSetLayout, 3 > layouts{
 			set0_World, 
 			set1_Transforms,
 			set2_TEXTURE,
-		};
-
-		VkPushConstantRange range{
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.offset = 0,
-			.size = sizeof(Push),
 		};
 
 		VkPipelineLayoutCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = uint32_t(layouts.size()),
 			.pSetLayouts = layouts.data(),
-			.pushConstantRangeCount = 1,
-			.pPushConstantRanges = &range,
+			.pushConstantRangeCount = 0,
+			.pPushConstantRanges = nullptr,
 		};
 
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));

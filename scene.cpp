@@ -436,9 +436,26 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     materials_map.insert({ material_name, cur_material_index });
                 }
                 
+                auto get_texture_format = [&](std::map<std::string, sejp::value> res) {
+                    Texture::Format format = Texture::Linear;
+                    if (auto format_res = res.find("format"); format_res != res.end()) {
+                        std::string tex_format = format_res->second.as_string().value();
+                        if (tex_format == "srgb") {
+                            format = Texture::sRGB;
+                        }
+                        else if (tex_format == "rgbe") {
+                            format = Texture::RGBE;
+                        }
+                        else if (tex_format != "Linear") {
+                            std::cerr << "Error: Unrecognized texture format for Material: " << materials[cur_material_index].name << ", defaulting to linear.\n";
+                        }
+                    }
+                    return format;
+                    };
+
                 materials[cur_material_index].normal_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultNormal);
                 materials[cur_material_index].displacement_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultDisplacement);
-                if (auto res = object_i.find("normalMap"); res != object_i.end()) {
+                if (auto res = object_index.find("normalMap"); res != object_index.end()) {
                     if (auto source = res->second.as_object().value().find("src"); source != res->second.as_object().value().end()) {
                         std::string tex_name = source->second.as_string().value();
                         if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
@@ -454,7 +471,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     }
                 }
 
-                if (auto res = object_i.find("displacementMap"); res != object_i.end()) {
+                if (auto res = object_index.find("displacementMap"); res != object_index.end()) {
                     if (auto source = res->second.as_object().value().find("src"); source != res->second.as_object().value().end()) {
                         std::string tex_name = source->second.as_string().value();
                         if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
@@ -478,11 +495,11 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     materials[cur_material_index].material_type = Material::Lambertian;
 
                     if (auto albedo_res = res->second.as_object().value().find("albedo"); albedo_res != res->second.as_object().value().end()) {
-                        auto albedo_vals = albeto_res->second.as_array();
+                        auto albedo_vals = albedo_res->second.as_array();
                         if (albedo_vals) // albedo [0,0,0]
                         {
                             std::vector<sejp::value> albedo_vector = albedo_vals.value();
-                            assert(albedo_vector.size() == 3;
+                            assert(albedo_vector.size() == 3);
                             std::string tex_name = material_name;
                             if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
                             {
@@ -500,20 +517,20 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                         else 
                         {
                             // check whether or not the albedo has a texture
-                            if (auto tex_res = albeto_res->second.as_object().value().find("src"); tex_res != albeto_res->second.as_object().value().end())
+                            if (auto tex_res = albedo_res->second.as_object().value().find("src"); tex_res != albedo_res->second.as_object().value().end())
                             {
                                 std::string tex_name = tex_res->second.as_string().value();
                                 if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
                                 {
-                                    materials[cur_material_index].texture_index = tex_map_entry->second;
+                                    materials[cur_material_index].material_textures = Material::MatLambertian(tex_map_entry->second);
                                 }
                                 else
                                 {
-                                    Texture new_texture = Texture(tex_name);
+                                    Texture new_texture = Texture(tex_name, get_texture_format(albedo_res->second.as_object().value()));
                                     uint32_t index = uint32_t(textures.size());
                                     textures.push_back(new_texture);
                                     textures_map.insert({ tex_name, index });
-                                    materials[cur_material_index].texture_index = index;
+                                    materials[cur_material_index].material_textures = Material::MatLambertian(index);
                                 }
                             }
                             else
@@ -534,17 +551,67 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     MatEnvMirror_count++;
                     materials[cur_material_index].material_type = Material::Environment;
                 }
-                else if (auto res = object_index.find("pbr"); res != object_index.end())
+                else if (auto pbr_res = object_index.find("pbr"); pbr_res != object_index.end())
                 {
-                    //find pbr
+                    MatLambertian_count++;
+                    materials[cur_material_index].material_type = Material::Lambertian;
+
+                    if (auto albedo_res = pbr_res->second.as_object().value().find("albedo"); albedo_res != pbr_res->second.as_object().value().end()) {
+                        auto albedo_vals = albedo_res->second.as_array();
+                        if (albedo_vals) // albedo [0,0,0]
+                        {
+                            std::vector<sejp::value> albedo_vector = albedo_vals.value();
+                            assert(albedo_vector.size() == 3);
+                            std::string tex_name = material_name;
+                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                            {
+                                materials[cur_material_index].material_textures = Material::MatLambertian(tex_map_entry->second);
+                            }
+                            else
+                            {
+                                Texture new_texture = Texture(glm::vec3(float(albedo_vector[0].as_number().value()), float(albedo_vector[1].as_number().value()), float(albedo_vector[2].as_number().value())));
+                                uint32_t index = uint32_t(textures.size());
+                                textures.push_back(new_texture);
+                                textures_map.insert({ tex_name, index });
+                                materials[cur_material_index].material_textures = Material::MatLambertian(index);
+                            }
+                        }
+                        else
+                        {
+                            // check whether or not the albedo has a texture
+                            if (auto tex_res = albedo_res->second.as_object().value().find("src"); tex_res != albedo_res->second.as_object().value().end())
+                            {
+                                std::string tex_name = tex_res->second.as_string().value();
+                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                                {
+                                    materials[cur_material_index].material_textures = Material::MatLambertian(tex_map_entry->second);
+                                }
+                                else
+                                {
+                                    Texture new_texture = Texture(tex_name, get_texture_format(albedo_res->second.as_object().value()));
+                                    uint32_t index = uint32_t(textures.size());
+                                    textures.push_back(new_texture);
+                                    textures_map.insert({ tex_name, index });
+                                    materials[cur_material_index].material_textures = Material::MatLambertian(index);
+                                }
+                            }
+                            else
+                            { //default lambertian material with nor source texture 
+                                materials[cur_material_index].material_textures = Material::MatLambertian(static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo));
+                            }
+                        }
+                    }
+                    else { //no abeldo field 
+                        materials[cur_material_index].material_textures = Material::MatLambertian(static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo));
+                    }
                 }
                 
             }
             else if (type.value() == "ENVIRONMENT")
             {
                 assert(environment.source == "" && "environment should not be instantiated already");
-                std::string environment_name = object_i.find("name")->second.as_string().value();
-                auto radiance_res = object_i.find("radiance")->second.as_object().value();
+                std::string environment_name = object_index.find("name")->second.as_string().value();
+                auto radiance_res = object_index.find("radiance")->second.as_object().value();
                 std::string environment_source = radiance_res.find("src")->second.as_string().value();
                 assert(radiance_res.find("type")->second.as_string().value() == "cube");
                 assert(radiance_res.find("format")->second.as_string().value() == "rgbe");

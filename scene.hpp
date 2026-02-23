@@ -27,18 +27,17 @@ struct Scene {
         std::variant<float, glm::vec3, std::string> value;
         bool is_2D = true; //if false, environment cube
         bool has_src = false;
-        enum Vkformat
-        {
-            Linear = 0,
-            SRGB= 1,
-            RGBE = 2,
-        } format = Linear;
-
-        Texture(std::string value_) : value(value_), is_2D(true), has_src(true)) {};
-        Texture(float value_) : value(value_), is_2D(true), has_src(false) {};
-        Texture(std::string value_) : value(value_), is_2D(true), has_src(true){};
-        Texture(glm::vec3 value_) : value(value_), is_2D(true), has_src(false) {};
-        Texture() : value(glm::vec3{ 1,1,1 }), is_2D(true), has_src(false) {};
+        bool single_channel = false;
+        enum Format {
+            Linear,
+            sRGB,
+            RGBE,
+        } format = Format::Linear;
+        Texture(std::string value_, bool single_channel_, Format format_ = Linear) : value(value_), is_2D(true), has_src(true), single_channel(single_channel_), format(format_) {};
+        Texture(float value_, Format format_ = Linear) : value(value_), is_2D(true), has_src(false), single_channel(true), format(format_) {};
+        Texture(std::string value_, Format format_ = Linear) : value(value_), is_2D(true), has_src(true), single_channel(false), format(format_) {};
+        Texture(glm::vec3 value_, Format format_ = Linear) : value(value_), is_2D(true), has_src(false), single_channel(false), format(format_) {};
+        Texture() : value(glm::vec3{ 1,1,1 }), is_2D(true), has_src(false), single_channel(false), format(Linear) {};
 
         enum struct DefaultTexture : uint8_t {
             DefaultAlbedo = 0,

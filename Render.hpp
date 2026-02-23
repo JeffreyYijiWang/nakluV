@@ -266,6 +266,8 @@ struct Render : RTG::Application {
 
 	ObjectsPipeline::World world;
 
+	using Transform = ObjectsPipeline::Transform;
+
 	struct ObjectInstance {
 		ObjectVertices vertices;
 		Transform transform;
