@@ -61,17 +61,17 @@ struct Scene {
         std::string name;
         uint32_t normal_index = 3;
         uint32_t displacement_index = 4;
-        struct MatLambertian {
+        struct LambertianMaterial {
             uint32_t albedo_index = 0;
         };
 
-        struct MatPBR {
+        struct PBRMaterial {
             uint32_t albedo_index = 0;
             uint32_t roughness_index = 1;
             uint32_t metalness_index = 2;
         };
 
-        std::variant<std::monostate, MatLambertian, MatPBR> material_textures;
+        std::variant<std::monostate, LambertianMaterial, PBRMaterial> material_textures;
     };
 
     struct Mesh {

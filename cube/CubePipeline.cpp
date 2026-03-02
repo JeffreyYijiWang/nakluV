@@ -1,4 +1,4 @@
-#include "CubeApp.hpp"
+#include "CubePipeline.hpp"
 
 #include "../Helpers.hpp"
 
@@ -9,10 +9,10 @@ static uint32_t comp_code[] =
 ;
 
 
-void CubeApp::CubeComputePipeline::create(RTG& rtg) {
+void CubePipeline::create(RTG& rtg) {
     VkShaderModule comp_module = rtg.helpers.create_shader_module(comp_code);
 
-    {//the set0_TEXTURE holds the input and output image
+    {//the set01_face holds the input and output image
         std::array<VkDescriptorSetLayoutBinding, 2> bindings{
             VkDescriptorSetLayoutBinding{
                 .binding = 0,
@@ -34,11 +34,33 @@ void CubeApp::CubeComputePipeline::create(RTG& rtg) {
             .pBindings = bindings.data(),
         };
 
-        VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set0_TEXTURE));
+        VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set01_face));
     }
+
+    { //the set2 layout holds roughness info (and maybe, someday, more brdf params):
+        std::array< VkDescriptorSetLayoutBinding, 1 > bindings{
+            VkDescriptorSetLayoutBinding{
+                .binding = 0,
+                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
+            },
+        };
+
+        VkDescriptorSetLayoutCreateInfo create_info{
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = uint32_t(bindings.size()),
+            .pBindings = bindings.data(),
+        };
+
+        VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set2_params));
+    }
+
     {//create pipeline layout:
-        std::array<VkDescriptorSetLayout, 1> layouts{
-            set0_TEXTURE
+        std::array<VkDescriptorSetLayout, 3> layouts{
+            set01_face,
+            set01_face,
+            set2_params,
         };
 
         VkPipelineLayoutCreateInfo create_info{
@@ -73,18 +95,24 @@ void CubeApp::CubeComputePipeline::create(RTG& rtg) {
     }
 }
 
-void RTGCubeApp::CubeComputePipeline::destroy(RTG& rtg) {
-    if (set0_TEXTURE != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(rtg.device, set0_TEXTURE, nullptr);
-        set0_TEXTURE = VK_NULL_HANDLE;
+void CubePipeline::destroy(RTG& rtg) {
+    if (handle != VK_NULL_HANDLE) {
+        vkDestroyPipeline(rtg.device, handle, nullptr);
+        handle = VK_NULL_HANDLE;
     }
+
     if (layout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(rtg.device, layout, nullptr);
         layout = VK_NULL_HANDLE;
     }
 
-    if (handle != VK_NULL_HANDLE) {
-        vkDestroyPipeline(rtg.device, handle, nullptr);
-        handle = VK_NULL_HANDLE;
+    if (set2_params != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(rtg.device, set2_params, nullptr);
+        set2_params = VK_NULL_HANDLE;
+    }
+
+    if (set01_face != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(rtg.device, set01_face, nullptr);
+        set01_face = VK_NULL_HANDLE;
     }
 }

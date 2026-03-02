@@ -40,6 +40,19 @@ const main_objs = [
 	maek.CPP('frustum_culling.cpp'),
 ];
 
+const cube_objs = [
+	maek.CPP('Render.cpp'),
+	maek.CPP('PosColVertex.cpp'),
+	maek.CPP('PosNorTexVertex.cpp'),
+	maek.CPP('PosNorTanTexVertex.cpp'),
+	maek.CPP('RTG.cpp'),
+	maek.CPP('Helpers.cpp'),
+	maek.CPP('data_path.cpp'),
+	maek.CPP('scene.cpp'),
+	maek.CPP('../Lib/sejp.cpp'),
+	maek.CPP('../cube/cube_main.cpp'),
+];
+
 //maek.GLSLC(...) builds a glsl source file:
 // it returns the path to the output .inl file
 
@@ -73,11 +86,24 @@ const mirror_shaders = [
 ];
 main_objs.push(maek.CPP('Render-MirrorPipeline.cpp', undefined, { depends: [...mirror_shaders] }));
 
+const pbr_shaders = [
+	maek.GLSLC('pbr.vert', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+	maek.GLSLC('pbr.frag', undefined, { GLSLCFlags: ['-mfmt=c'] }),
+];
+main_objs.push(maek.CPP('Render-PBRPipeline.cpp', undefined, { depends: [...pbr_shaders] }));
 
 const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');
 
+
+const cube_shaders = [
+	maek.GLSLC('cube.comp', 'spv/cube.comp', { GLSLCFlags: [...maek.DEFAULT_OPTIONS.GLSLCFlags, '-DLAMBERTIAN'] }),
+];
+cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
+//and link the executable in the same way as the viewer:
+const cube_exe = maek.LINK([...cube_objs], 'bin/cube');
+
 //default targets:
-maek.TARGETS = [viewer_exe];
+maek.TARGETS = [viewer_exe, cube_exe];
 
 //- - - - - - - - - - - - - - - - - - - - -
 function custom_flags_and_rules() {

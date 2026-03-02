@@ -1,0 +1,26 @@
+#version 450 
+
+layout (set= 0, binding = 0, std140) uniform InFace{
+	mat3x3 WORLD_FROM_IN_PX;
+};
+
+layout(set = 0, binding = 1, rgba32f) uniform restrict readonly image2D inFace;
+
+layout(set = 1, binding =1, std140) uniform OutFace{
+	mat3x3 WPRLD_FROM_OUT_PX;
+};
+
+layout(set=2, binding = 0) uniform Roughness {
+	float roughness;
+};
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z= 1) in;
+
+void main(){
+	
+	int out_x = int(gl_GlobalInvocationID.x);
+	int out_y = int(gl_GlobalInvocationID.y);
+
+	vec3 acc = imageLoad(inFace, ivec2(out_x, out_y)).rbg;
+	imageStore(outface, ivec2(out_x, out_y), vec4(acc, 0.0));
+}
