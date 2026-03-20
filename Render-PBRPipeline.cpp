@@ -4,14 +4,14 @@
 #include "VK.hpp"
 
 static uint32_t vert_code[] =
-#include "spv/objects.vert.inl"
+#include "spv/pbr.vert.inl"
 ;
 
 static uint32_t frag_code[] =
-#include "spv/objects.frag.inl"
+#include "spv/pbr.frag.inl"
 ;
 
-void Render::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
+void Render::PBRPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
 	VkShaderModule vert_module = rtg.helpers.create_shader_module(vert_code);
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
@@ -226,7 +226,7 @@ void Render::ObjectsPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_
 	vkDestroyShaderModule(rtg.device, vert_module, nullptr);
 }
 
-void Render::ObjectsPipeline::destroy(RTG& rtg) {
+void Render::PBRPipeline::destroy(RTG& rtg) {
 
 	if (set2_TEXTURE != VK_NULL_HANDLE) {
 		vkDestroyDescriptorSetLayout(rtg.device, set2_TEXTURE, nullptr);

@@ -1,5 +1,5 @@
 #pragma once
-#include "../RTG.hpp"
+#include "RTG.hpp"
 
 struct CubePipeline {
 	//descriptor set layouts:

@@ -1,10 +1,11 @@
 
-#include "CubeApp.hpp"
+#include "CubePipeline.hpp"
 
 #include "RTG.hpp"
 
 #include "Scene.hpp"
-#include "../glm.hpp"
+#include "glm.hpp"
+#include "../Lib/stb/stb_image_write.h"
 #include <iostream>
 
 
@@ -32,7 +33,8 @@ struct GPUFace {
 		);
 
 		//actually upload the image:
-		rtg.helpers.transfer_to_image(data_padded.data(), sizeof(data_padded[0]) * sz * sz, image, VK_IMAGE_LAYOUT_GENERAL);
+		//rtg.helpers.transfer_to_image(data_padded.data(), sizeof(data_padded[0]) * (size_t)sz * (size_t)sz, image, VK_IMAGE_LAYOUT_GENERAL);
+		rtg.helpers.transfer_to_image(data_padded.data(), sizeof(data_padded[0]) * (size_t)sz * (size_t)sz, image);
 
 		//---- buffer ----
 		{ //buffer:
@@ -183,9 +185,6 @@ int main(int argc, char** argv) {
 		//loads vulkan library, creates surface, initializes helpers:
 		RTG rtg(configuration);
 
-		//initializes global (whole-life-of-application) resources:
-		CubeApp application(rtg);
-
 		
 		//TODO: create computation pipeline
 		CubePipeline pipeline;
@@ -244,9 +243,9 @@ int main(int argc, char** argv) {
 
 
 		GPUFace in_face;
-		in_face.create(rtg, descriptor_pool, pipeline, sz, data.data());
+		in_face.create(rtg, descriptor_pool, pipeline, (uint32_t)sz, data.data());
 		GPUFace out_face;
-		out_face.create(rtg, descriptor_pool, pipeline, sz, data.data());
+		out_face.create(rtg, descriptor_pool, pipeline, (uint32_t)sz, data.data());
 
 		{ //run pipeline
 
@@ -281,7 +280,7 @@ int main(int argc, char** argv) {
 
 
 			//actually run the thing:
-			vkCmdDispatchBase(command_buffer, 0, 0, 1, sz, sz, 1);
+			vkCmdDispatchBase(command_buffer, 0, 0, 1, (uint32_t)sz, (uint32_t) sz, 1);
 
 			//done recording:
 			VK(vkEndCommandBuffer(command_buffer));

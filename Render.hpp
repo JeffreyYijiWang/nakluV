@@ -151,6 +151,45 @@ struct Render : RTG::Application {
 		void destroy(RTG&);
 	} mirror_pipeline;
 
+
+	struct PBRPipeline {
+
+		// descriptor set layout 
+		VkDescriptorSetLayout set0_World = VK_NULL_HANDLE;
+		VkDescriptorSetLayout set1_Transforms = VK_NULL_HANDLE;
+		VkDescriptorSetLayout set2_TEXTURE = VK_NULL_HANDLE;
+
+		// types for descriptors:
+		struct World {
+			struct { float x, y, z, padding_; } SKY_DIRECTION;
+			struct { float r, g, b, padding_; } SKY_ENERGY;
+			struct { float x, y, z, padding_; } SUN_DIRECTION;
+			struct { float r, g, b, padding_; } SUN_ENERGY;
+			glm::vec4 CAMERA_POSITION_ENVIRONMENT_MIPS; //xyz: camera position, z: environment mips
+		};
+
+		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4, "World is the expected size.");
+		struct Transform {
+			mat4 CLIP_FROM_LOCAL;
+			mat4 WORLD_FROM_LOCAL;
+			mat4 WORLD_FROM_LOCAL_NORMAL;
+		};
+		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
+		// no push constnat s
+		struct Push {
+			float time;
+		};
+
+		VkPipelineLayout layout = VK_NULL_HANDLE;
+
+		using Vertex = PosNorTanTexVertex;
+
+		VkPipeline handle = VK_NULL_HANDLE;
+
+		void create(RTG&, VkRenderPass render_pass, uint32_t subpass);
+		void destroy(RTG&);
+	}pbr_pipeline;
+
 	//pools from which per-workspace things are allocated:
 	VkCommandPool command_pool = VK_NULL_HANDLE;
 	VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;

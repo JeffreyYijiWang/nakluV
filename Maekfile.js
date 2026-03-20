@@ -26,6 +26,8 @@ custom_flags_and_rules();
 
 //maek.CPP(...) builds a c++ file:
 // it returns the path to the output object file
+
+
 const main_objs = [
 	maek.CPP('Render.cpp'),
 	maek.CPP('PosColVertex.cpp'),
@@ -41,16 +43,7 @@ const main_objs = [
 ];
 
 const cube_objs = [
-	maek.CPP('Render.cpp'),
-	maek.CPP('PosColVertex.cpp'),
-	maek.CPP('PosNorTexVertex.cpp'),
-	maek.CPP('PosNorTanTexVertex.cpp'),
-	maek.CPP('RTG.cpp'),
-	maek.CPP('Helpers.cpp'),
-	maek.CPP('data_path.cpp'),
-	maek.CPP('scene.cpp'),
-	maek.CPP('../Lib/sejp.cpp'),
-	maek.CPP('../cube/cube_main.cpp'),
+	maek.CPP('cube_main.cpp'),
 ];
 
 //maek.GLSLC(...) builds a glsl source file:
@@ -95,15 +88,16 @@ main_objs.push(maek.CPP('Render-PBRPipeline.cpp', undefined, { depends: [...pbr_
 const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');
 
 
-const cube_shaders = [
-	maek.GLSLC('cube.comp', 'spv/cube.comp', { GLSLCFlags: [...maek.DEFAULT_OPTIONS.GLSLCFlags, '-DLAMBERTIAN'] }),
-];
-cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
-//and link the executable in the same way as the viewer:
-const cube_exe = maek.LINK([...cube_objs], 'bin/cube');
+//const cube_shaders = [
+//	maek.GLSLC('cube.comp', 'spv/cube.comp', { GLSLCFlags: [...maek.DEFAULT_OPTIONS.GLSLCFlags, '-DLAMBERTIAN'] }),
+//];
+//cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
+////and link the executable in the same way as the viewer:
+//const cube_exe = maek.LINK([...cube_objs], 'bin/cube');
 
 //default targets:
-maek.TARGETS = [viewer_exe, cube_exe];
+//maek.TARGETS = [viewer_exe, cube_exe];
+maek.TARGETS = [viewer_exe];
 
 //- - - - - - - - - - - - - - - - - - - - -
 function custom_flags_and_rules() {

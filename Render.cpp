@@ -121,6 +121,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 	objects_pipeline.create(rtg, render_pass, 0);
 	environment_pipeline.create(rtg, render_pass, 0);
 	mirror_pipeline.create(rtg, render_pass, 0);
+	pbr_pipeline.create(rtg, render_pass, 0);
 
 
 
@@ -791,7 +792,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 					cur_material_tex_count = lambertian_tex_count;
 					cur_infos[2] = VkDescriptorImageInfo{
 					.sampler = texture_sampler,
-					.imageView = texture_views[std::get<Scene::Material::MatLambertian>(material.material_textures).albedo_index],
+					.imageView = texture_views[std::get<Scene::Material::LambertianMaterial>(material.material_textures).albedo_index],
 					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 					};
 				}
@@ -1016,6 +1017,7 @@ Render::~Render() {
 	objects_pipeline.destroy(rtg);
 	environment_pipeline.destroy(rtg);
 	mirror_pipeline.destroy(rtg);
+	pbr_pipeline.destroy(rtg);
 
 	// DESTORY COMMAND POOL
 	if (command_pool != VK_NULL_HANDLE) {

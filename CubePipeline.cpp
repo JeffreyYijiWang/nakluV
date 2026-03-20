@@ -1,8 +1,8 @@
 #include "CubePipeline.hpp"
 
-#include "../Helpers.hpp"
+#include "Helpers.hpp"
 
-#include "../VK.hpp"
+#include "VK.hpp"
 
 static uint32_t comp_code[] =
 #include "spv/cube.comp.inl"
