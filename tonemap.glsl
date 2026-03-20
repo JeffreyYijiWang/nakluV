@@ -26,3 +26,7 @@ vec3 ACESFitted(vec3 color) {
     color = clamp(color, 0.0, 1.0);
     return color;
 }
+
+vec3 gamma_correction(vec3 color) {
+    return pow(color, vec3(1.0/2.2));
+}

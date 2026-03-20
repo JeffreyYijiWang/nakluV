@@ -15,7 +15,7 @@
 #include <iostream>
 #include <algorithm>
 #include <fstream>
-
+#include <iostream>
 #include <deque>
 
 Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
@@ -686,30 +686,30 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			}
 			assert(texture_views.size() == textures.size());
 		}
-		//}
-		//
-		//	VkSamplerCreateInfo create_info{
-		//	.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-		//		.flags = 0,
-		//		.magFilter = VK_FILTER_NEAREST,
-		//		.minFilter = VK_FILTER_NEAREST,
-		//		.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
-		//		.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		//		.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		//		.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-		//		.mipLodBias = 0.0f,
-		//		.anisotropyEnable = VK_FALSE,
-		//		.maxAnisotropy = 0.0f, //doesn't matter if anisotropy ins't enabled
-		//		.compareEnable = VK_FALSE,
-		//		.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled 
-		//		.minLod = 0.0f,
-		//		.maxLod = 0.0f ,
-		//		.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-		//		.unnormalizedCoordinates = VK_FALSE,
-		//	};
+		
+		{
+			VkSamplerCreateInfo create_info{
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+				.flags = 0,
+				.magFilter = VK_FILTER_NEAREST,
+				.minFilter = VK_FILTER_NEAREST,
+				.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+				.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+				.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+				.mipLodBias = 0.0f,
+				.anisotropyEnable = VK_FALSE,
+				.maxAnisotropy = 0.0f, //doesn't matter if anisotropy ins't enabled
+				.compareEnable = VK_FALSE,
+				.compareOp = VK_COMPARE_OP_ALWAYS, // doesn't matter if compre isnt' enabled 
+				.minLod = 0.0f,
+				.maxLod = 0.0f ,
+				.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+				.unnormalizedCoordinates = VK_FALSE,
+			};
 
-		//	VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
-		//}
+			VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
+		}
 
 		{//create the texture descirptor pool
 
@@ -745,12 +745,19 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 			.descriptorSetCount = 1,
 			.pSetLayouts = &objects_pipeline.set2_TEXTURE,
 			};
+			VkDescriptorSetAllocateInfo mat_pbr_alloc_info{
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = texture_descriptor_pool,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &pbr_pipeline.set2_TEXTURE,
+			};
 			VkDescriptorSetAllocateInfo mat_envmirror_alloc_info{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 				.descriptorPool = texture_descriptor_pool,
 				.descriptorSetCount = 1,
 				.pSetLayouts = &environment_pipeline.set2_TEXTURE,
 			};
+			
 			texture_descriptors.assign(scene.materials.size(), VK_NULL_HANDLE);
 
 			for (uint32_t material_index = 0; material_index < scene.materials.size(); ++material_index) {
@@ -758,15 +765,17 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 				if (scene.materials[material_index].material_type == Scene::Material::Lambertian) {
 					VK(vkAllocateDescriptorSets(rtg.device, &mat_lambertian_alloc_info, &descriptor_set));
 				}
+				else if (scene.materials[material_index].material_type == Scene::Material::PBR) {
+					VK(vkAllocateDescriptorSets(rtg.device, &mat_pbr_alloc_info, &descriptor_set));
+				}
 				else {
 					VK(vkAllocateDescriptorSets(rtg.device, &mat_envmirror_alloc_info, &descriptor_set));
 				}
 			}
 			//write descriptors for materials:
 			std::vector< VkWriteDescriptorSet > writes(scene.materials.size());
-
 			std::vector< std::array<VkDescriptorImageInfo, 5> > infos(scene.materials.size());
-			/*constexpr uint8_t pbr_tex_count = 5;*/
+			constexpr uint8_t pbr_tex_count = 5;
 			constexpr uint8_t lambertian_tex_count = 3;
 			constexpr uint8_t envmirror_tex_count = 2;
 
@@ -796,6 +805,25 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 					};
 				}
+				else if (material.material_type == Scene::Material::PBR) {
+					cur_material_tex_count = pbr_tex_count;
+					const Scene::Material::PBRMaterial& pbr_textures = std::get<Scene::Material::PBRMaterial>(material.material_textures);
+					cur_infos[2] = VkDescriptorImageInfo{
+						.sampler = texture_sampler,
+						.imageView = texture_views[pbr_textures.albedo_index],
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					};
+					cur_infos[3] = VkDescriptorImageInfo{
+						.sampler = texture_sampler,
+						.imageView = texture_views[pbr_textures.roughness_index],
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					};
+					cur_infos[4] = VkDescriptorImageInfo{
+						.sampler = texture_sampler,
+						.imageView = texture_views[pbr_textures.metalness_index],
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					};
+				}
 				else {
 					cur_material_tex_count = envmirror_tex_count;
 				}
@@ -806,7 +834,7 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 					.dstSet = texture_descriptors[material_index],
 					.dstBinding = 0,
 					.dstArrayElement = 0,
-					.descriptorCount = 1,
+					.descriptorCount = cur_material_tex_count,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 					.pImageInfo = &cur_infos[0],
 				};
@@ -1102,14 +1130,14 @@ void Render::destroy_framebuffers() {
 }
 
 
-void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
+void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 	//assert that parameters are valid:
 	assert(&rtg == &rtg_);
 	assert(render_params.workspace_index < workspaces.size());
 	assert(render_params.image_index < swapchain_framebuffers.size());
 
 	//get more convenient names for the current workspace and target framebuffer:
-	Workspace &workspace = workspaces[render_params.workspace_index];
+	Workspace& workspace = workspaces[render_params.workspace_index];
 	VkFramebuffer framebuffer = swapchain_framebuffers[render_params.image_index];
 
 	//record (into `workspace.command_buffer`) commands that run a `render_pass` that just clears `framebuffer`:
@@ -1139,7 +1167,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			if (workspace.lines_vertices.handle) {
 				rtg.helpers.destroy_buffer(std::move(workspace.lines_vertices));
 			}
-			
+
 			workspace.lines_vertices_src = rtg.helpers.create_buffer(
 				new_bytes,
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT, //GOING TO HAVE gpu COPY FROM THIS MEMORY
@@ -1163,7 +1191,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 		//host-side copy int lines)vertices-stc;
 		assert(workspace.lines_vertices_src.allocation.mapped);
 		std::memcpy(workspace.lines_vertices_src.allocation.data(), lines_vertices.data(), needed_bytes);
-		
+
 		//GPU doing host to GPu copy 
 		//decice -size copy form lines)_vertical _src -> lines_vertices 
 		VkBufferCopy copy_region{
@@ -1213,8 +1241,8 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 
 	}
 
-	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty()) { //upload object transforms:
-		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size()) * sizeof(ObjectsPipeline::Transform);
+	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty()) { //upload object transforms:
+		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size()+ pbr_instances.size()) * sizeof(ObjectsPipeline::Transform);
 		if (workspace.Transforms_src.handle == VK_NULL_HANDLE ||
 			workspace.Transforms_src.size < needed_bytes) {
 			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
@@ -1284,6 +1312,10 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 				++out;
 			}
 			for (ObjectInstance const& inst : mirror_instances) {
+				*out = inst.transform;
+				++out;
+			}
+			for (ObjectInstance const& inst : pbr_instances) {
 				*out = inst.transform;
 				++out;
 			}
@@ -1391,7 +1423,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
 		
-		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty()) {
+		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty()|| !pbr_instances.empty()) {
 			//bind Transforms descriptor set:
 			std::array< VkDescriptorSet, 2 > descriptor_sets{
 				workspace.World_descriptors, //0: World
@@ -1508,6 +1540,34 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			}
 
 		}
+		if (!pbr_instances.empty()) {//draw with the objects pipeline:
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pbr_pipeline.handle);
+
+			{//use object_vertices as vertex buffer binding 0:
+				std::array<VkBuffer, 1>vertex_buffers{ object_vertices.handle };
+				std::array< VkDeviceSize, 1 > offsets{ 0 };
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
+
+			//World descriptor still bound
+
+			//draw all instances:
+			uint32_t index_offset = uint32_t(lambertian_instances.size() + environment_instances.size() + mirror_instances.size());// account for lambertian, environment, and mirror size
+			for (ObjectInstance const& inst : pbr_instances) {
+				uint32_t index = uint32_t(&inst - &pbr_instances[0]) + index_offset;
+				//bind texture descriptor set:
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer, //command buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS, //pipeline bind point
+					pbr_pipeline.layout, //pipeline layout
+					2, //second set
+					1, &texture_descriptors[inst.material_index], //descriptor sets count, ptr
+					0, nullptr //dynamic offsets count, ptr
+				);
+				vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+			}
+
+		}
 		if (!lines_vertices.empty())
 		{//draw with the lines pipeline;
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
@@ -1569,18 +1629,14 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params) {
 			.pSignalSemaphores = signal_semaphores.data(),
 		};
 
+
+		//cube pipeline add hwere in teh queeus
 		VK(vkQueueSubmit(rtg.graphics_queue, 1, &submit_info, render_params.workspace_available));
 	}
 }
 
 
 void Render::update(float dt) {
-	time = std::fmod(time + dt, 60.0f);
-	{
-		Timer timer([](double dt) { std::cout << "REPORT prep-work " << dt * 1000.0 << "ms" << std::endl; });
-	}
-	
-
 	{//update the animations according to the drivers
 		scene.animation_setting = rtg.configuration.animation_settings;
 		float new_t = dt + scene.return_time;
@@ -1750,6 +1806,7 @@ void Render::update(float dt) {
 				world.CAMERA_POSITION_ENVIRONMENT_MIPS.x = eye.x;
 				world.CAMERA_POSITION_ENVIRONMENT_MIPS.y = eye.y;
 				world.CAMERA_POSITION_ENVIRONMENT_MIPS.z = eye.z;
+
 			}
 			else if (camera_mode == CameraMode::Debug) {
 				CLIP_FROM_WORLD = perspective(
@@ -1951,6 +2008,7 @@ void Render::update(float dt) {
 		lambertian_instances.clear();
 		environment_instances.clear();
 		mirror_instances.clear();
+		pbr_instances.clear();
 
 		glm::mat4x4 frustum_view_from_world = culling_camera == CameraMode::Scene ? view_from_world[0] : view_from_world[1];
 
@@ -2141,7 +2199,15 @@ void Render::update(float dt) {
 								});
 						}
 						else if (cur_material.material_type == Scene::Material::MaterialType::PBR) {
-
+							pbr_instances.emplace_back(ObjectInstance{
+							.vertices = mesh_vertices[cur_mesh_index],
+							.transform{
+								.CLIP_FROM_LOCAL = CLIP_FROM_WORLD * WORLD_FROM_LOCAL,
+								.WORLD_FROM_LOCAL = WORLD_FROM_LOCAL,
+								.WORLD_FROM_LOCAL_NORMAL = WORLD_FROM_LOCAL_NORMAL,
+							},
+							.material_index = cur_material_index,
+								});
 						}
 					}
 					else {

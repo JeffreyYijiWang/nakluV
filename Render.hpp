@@ -312,7 +312,7 @@ struct Render : RTG::Application {
 		Transform transform;
 		uint32_t material_index;
 	};
-	std::vector< ObjectInstance > lambertian_instances, environment_instances, mirror_instances;
+	std::vector< ObjectInstance > lambertian_instances, environment_instances, mirror_instances, pbr_instances;
 
 	//-------------------------------------
 	void set_animation_time(float t);

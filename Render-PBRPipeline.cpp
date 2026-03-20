@@ -66,9 +66,33 @@ void Render::PBRPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t su
 	}
 
 	{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
-		std::array< VkDescriptorSetLayoutBinding, 1> bindings{
+		std::array< VkDescriptorSetLayoutBinding, 5> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+			VkDescriptorSetLayoutBinding{
+				.binding = 1,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+			VkDescriptorSetLayoutBinding{
+				.binding = 2,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+			VkDescriptorSetLayoutBinding{
+				.binding = 3,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
+			VkDescriptorSetLayoutBinding{
+				.binding = 4,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
