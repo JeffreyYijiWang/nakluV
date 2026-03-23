@@ -86,6 +86,8 @@ struct RTG {
 
 		std::string lambert_out_image = "";
 
+		uint8_t cube_mode = 0;
+
 		uint8_t ggx_levels = 5;
 
 		//path.s72 format scene

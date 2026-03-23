@@ -3,7 +3,7 @@
 
 struct CubePipeline {
 	//descriptor set layouts:
-	VkDescriptorSetLayout set01_face = VK_NULL_HANDLE; //used for both input and output
+	VkDescriptorSetLayout set01_face = VK_NULL_HANDLE; //used for input
 	VkDescriptorSetLayout set2_params = VK_NULL_HANDLE; //used for ggx only
 
 	//types for descriptors:
@@ -17,9 +17,12 @@ struct CubePipeline {
 	static_assert(sizeof(Face) == (3 * 4) * 4, "Face descriptor is the expected size.");
 
 	struct Params {
-		float roughness;
-	};
-	static_assert(sizeof(Params) == 4, "Params descriptor is the expected size.");
+			int32_t mode;         // 0 = LambertianDirect, 1 = LambertianMonteCarlo, 2 = GGX ...
+			int32_t sample_count; // MC samples, 0 for direct
+			float roughness;      // used for GGX, ignored for Lambertian
+			float pad0;
+	}cube_param;
+	static_assert(sizeof(Params) == 16, "Params descriptor is the expected size.");
 
 	//no push constants
 

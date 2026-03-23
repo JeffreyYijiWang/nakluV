@@ -38,12 +38,12 @@ void RTG::Configuration::parse(int argc, char **argv) {
 				argi += 1;
 				ggx_out_image = argv[argi];
 			}
-			else if (arg == "--lambertian ") {
+			else if (arg == "--lambertian") {
 				if (argi + 1 >= argc) throw std::runtime_error("--lambertian requires a parameter (a file path for output image).");
 				argi += 1;
 				lambert_out_image = argv[argi];
 			}
-			else if (arg == "--ggx-levels ") {
+			else if (arg == "--ggx-levels") {
 				if (argi + 1 >= argc) throw std::runtime_error("--ggx-levels requires a parameter (number of output levels).");
 				argi += 1;
 				ggx_levels = uint8_t(atoi(argv[argi]));
@@ -57,101 +57,104 @@ void RTG::Configuration::parse(int argc, char **argv) {
 		}
 		return;
 	}
-
-	for (int argi = 1; argi < argc; ++argi) {
-		std::string arg = argv[argi];
-		if (arg == "--debug") {
-			debug = true;
-		} else if (arg == "--no-debug") {
-			debug = false;
-		} else if (arg == "--physical-device") {
-			if (argi + 1 >= argc) throw std::runtime_error("--physical-device requires a parameter (a device name).");
-			argi += 1;
-			physical_device_name = argv[argi];
-		}
-		else if (arg == "--drawing-size") {
-			if (argi + 2 >= argc) throw std::runtime_error("--drawing-size requires two parameters (width and height).");
-			auto conv = [&](std::string const& what) {
+	else {
+		for (int argi = 1; argi < argc; ++argi) {
+			std::string arg = argv[argi];
+			if (arg == "--debug") {
+				debug = true;
+			}
+			else if (arg == "--no-debug") {
+				debug = false;
+			}
+			else if (arg == "--physical-device") {
+				if (argi + 1 >= argc) throw std::runtime_error("--physical-device requires a parameter (a device name).");
 				argi += 1;
-				std::string val = argv[argi];
-				for (size_t i = 0; i < val.size(); ++i) {
-					if (val[i] < '0' || val[i] > '9') {
-						throw std::runtime_error("--drawing-size " + what + " should match [0-9]+, got '" + val + "'.");
+				physical_device_name = argv[argi];
+			}
+			else if (arg == "--drawing-size") {
+				if (argi + 2 >= argc) throw std::runtime_error("--drawing-size requires two parameters (width and height).");
+				auto conv = [&](std::string const& what) {
+					argi += 1;
+					std::string val = argv[argi];
+					for (size_t i = 0; i < val.size(); ++i) {
+						if (val[i] < '0' || val[i] > '9') {
+							throw std::runtime_error("--drawing-size " + what + " should match [0-9]+, got '" + val + "'.");
+						}
 					}
+					return std::stoul(val);
+					};
+				surface_extent.width = conv("width");
+				surface_extent.height = conv("height");
+			}
+			else if (arg == "--headless") {
+				headless = true;
+			}
+			else if (arg == "--scene") {
+				if (argi + 1 >= argc) throw std::runtime_error("--scene requires a .s72 file (a filename name).");
+				argi += 1;
+				scene_path = argv[argi];
+			}
+			else if (arg == "--camera") {
+				argi += 1;
+				scene_camera = argv[argi];
+			}
+			else if (arg == "--culling") {
+				argi += 1;
+				std::string settings = argv[argi];
+				if (settings == "none") {
+					culling_settings = 0;
 				}
-				return std::stoul(val);
-				};
-			surface_extent.width = conv("width");
-			surface_extent.height = conv("height");
-		}
-		else if (arg == "--headless") {
-			headless = true;
-		}
-		else if (arg == "--scene") {
-			if (argi + 1 >= argc) throw std::runtime_error("--scene requires a .s72 file (a filename name).");
-			argi += 1;
-			scene_path = argv[argi];
-		}
-		else if (arg == "--camera") {
-			argi += 1;
-			scene_camera = argv[argi];
-		}
-		else if (arg == "--culling") {
-			argi += 1;
-			std::string settings = argv[argi];
-			if (settings == "none") {
-				culling_settings = 0;
+				else if (settings == "frustum") {
+					culling_settings = 1;
+				}
+				else {
+					throw std::runtime_error("--culling only takes none or frustum as parameters");
+				}
 			}
-			else if (settings == "frustum") {
-				culling_settings = 1;
+			else if (arg == "--animation") {
+				argi += 1;
+				std::string settings = argv[argi];
+				if (settings == "paused") {
+					animation_settings = 2;
+					past_animation_settings = 2;
+				}
+				else if (settings == "loop") {
+					animation_settings = 1;
+					past_animation_settings = 1;
+				}
+				else if (settings == "play-once") {
+					animation_settings = 0;
+					past_animation_settings = 0;
+				}
+				else {
+					throw std::runtime_error("--animation only takes loop, play-once, or paused as parameters");
+				}
 			}
-			else {
-				throw std::runtime_error("--culling only takes none or frustum as parameters");
+			else if (arg == "--exposure") {
+				if (argi + 1 >= argc) throw std::runtime_error("--expose requires a parameter (int) for 2*E .");
+				argi += 1;
+				expose = (float)atof(argv[argi]);
 			}
-		}
-		else if (arg == "--animation") {
-			argi += 1;
-			std::string settings = argv[argi];
-			if (settings == "paused") {
-				animation_settings = 2;
-				past_animation_settings = 2;
+			else if (arg == "--tone-map") {
+				argi += 1;
+				std::string settings = argv[argi];
+				if (settings == "linear") {
+					tone_mapping = 0;
+				}
+				else if (settings == "ACES") {
+					tone_mapping = 1;
+				}
+				else if (settings == "gamma") {
+					tone_mapping = 2;
+				}
+				else {
+					throw std::runtime_error("--tone-map only takes linear,gamma as parameters");
+				}
 			}
-			else if (settings == "loop") {
-				animation_settings = 1;
-				past_animation_settings = 1;
-			}
-			else if (settings == "play-once") {
-				animation_settings = 0;
-				past_animation_settings = 0;
-			}
-			else {
-				throw std::runtime_error("--animation only takes loop, play-once, or paused as parameters");
-			}
-		}
-		else if (arg == "--exposure") {
-			if (argi + 1 >= argc) throw std::runtime_error("--expose requires a parameter (int) for 2*E .");
-			argi += 1;
-			expose = (float)atof(argv[argi]);
-		}
-		else if (arg == "--tone-map") {
-			argi += 1;
-			std::string settings = argv[argi];
-			if (settings == "linear") {
-				tone_mapping = 0;
-			}
-			else if (settings == "ACES") {
-				tone_mapping = 1;
-			}
-			else if (settings == "gamma") {
-				tone_mapping = 2;
-			}
-			else {
-				throw std::runtime_error("--tone-map only takes linear,gamma as parameters");
-			}
-		}
 
-		else {
-			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
+			else {
+				throw std::runtime_error("Unrecognized argument '" + arg + "'.");
+			}
 		}
 	}
 }

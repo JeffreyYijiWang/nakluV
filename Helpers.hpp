@@ -70,6 +70,8 @@ struct Helpers {
 	void transfer_to_buffer(void const *data, size_t size, AllocatedBuffer &target);
 	void transfer_to_image(void const *data, size_t size, AllocatedImage &image); //NOTE: image layout after call is VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 	void transfer_to_image_cube(void* data, size_t size, AllocatedImage& target, uint8_t mip_level = 1);
+	void transfer_to_image_2d(void const* data, size_t size, AllocatedImage& target, VkImageLayout final_layout);
+
 	VkDeviceSize get_cube_buffer_offset(uint32_t base_width, uint32_t base_height, uint32_t face, uint32_t level, size_t bytes_per_pixel);
 	VkCommandPool transfer_command_pool = VK_NULL_HANDLE;
 	VkCommandBuffer transfer_command_buffer = VK_NULL_HANDLE;

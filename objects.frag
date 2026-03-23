@@ -57,7 +57,7 @@ void main() {
 	vec3 mapped;
 	if (toneMapMode == 0) {
 		mapped = exposed;
-	} else if(toneMapMode == 0) {
+	} else if(toneMapMode == 1) {
 		mapped = ACESFitted(exposed);
 	}
 	else{

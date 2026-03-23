@@ -13,20 +13,25 @@ void CubePipeline::create(RTG& rtg) {
     VkShaderModule comp_module = rtg.helpers.create_shader_module(comp_code);
 
     {//the set01_face holds the input and output image
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings{
-            VkDescriptorSetLayoutBinding{
-                .binding = 0,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-            },
-            VkDescriptorSetLayoutBinding{
-                .binding = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                .descriptorCount = 1,
-                .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT
-            },
+        std::array<VkDescriptorSetLayoutBinding, 2> bindings{ 
+        
+        VkDescriptorSetLayoutBinding{
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+            .pImmutableSamplers = nullptr,
+        },
+        VkDescriptorSetLayoutBinding{
+            .binding = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+            .pImmutableSamplers = nullptr,
+        }, 
         };
+       
+
 
         VkDescriptorSetLayoutCreateInfo create_info{
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,

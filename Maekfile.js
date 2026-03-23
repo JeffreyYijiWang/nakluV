@@ -27,23 +27,26 @@ custom_flags_and_rules();
 //maek.CPP(...) builds a c++ file:
 // it returns the path to the output object file
 
-
+const common_objs = [
+	maek.CPP('RTG.cpp'),
+	maek.CPP('Helpers.cpp'),
+	maek.CPP('data_path.cpp'),
+	maek.CPP('../Lib/sejp.cpp'),
+];
 const main_objs = [
 	maek.CPP('Render.cpp'),
 	maek.CPP('PosColVertex.cpp'),
 	maek.CPP('PosNorTexVertex.cpp'),
 	maek.CPP('PosNorTanTexVertex.cpp'),
-	maek.CPP('RTG.cpp'),
-	maek.CPP('Helpers.cpp'),
 	maek.CPP('main.cpp'),
-	maek.CPP('data_path.cpp'),
 	maek.CPP('scene.cpp'),
-	maek.CPP('../Lib/sejp.cpp'),
 	maek.CPP('frustum_culling.cpp'),
+	...common_objs,
 ];
 
 const cube_objs = [
 	maek.CPP('cube_main.cpp'),
+	...common_objs,
 ];
 
 //maek.GLSLC(...) builds a glsl source file:
@@ -88,16 +91,16 @@ main_objs.push(maek.CPP('Render-PBRPipeline.cpp', undefined, { depends: [...pbr_
 const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');
 
 
-//const cube_shaders = [
-//	maek.GLSLC('cube.comp', 'spv/cube.comp', { GLSLCFlags: [...maek.DEFAULT_OPTIONS.GLSLCFlags, '-DLAMBERTIAN'] }),
-//];
-//cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
+const cube_shaders = [
+	maek.GLSLC('cube.comp', 'spv/cube.comp', { GLSLCFlags: [...maek.DEFAULT_OPTIONS.GLSLCFlags, '-DLAMBERTIAN'] }),
+];
+cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
 ////and link the executable in the same way as the viewer:
-//const cube_exe = maek.LINK([...cube_objs], 'bin/cube');
+const cube_exe = maek.LINK([...cube_objs], 'bin/cube');
 
 //default targets:
-//maek.TARGETS = [viewer_exe, cube_exe];
-maek.TARGETS = [viewer_exe];
+maek.TARGETS = [viewer_exe, cube_exe];
+//maek.TARGETS = [viewer_exe];
 
 //- - - - - - - - - - - - - - - - - - - - -
 function custom_flags_and_rules() {
@@ -135,7 +138,7 @@ function custom_flags_and_rules() {
 		VULKAN_SDK = process.env.VULKAN_SDK || `${process.env.USERPROFILE}/VulkanSDK/1.4.335.0`;
 		console.log(`Using VULKAN_SDK='${VULKAN_SDK}'; set VULKAN_SDK environment variable to override.`);
 
-		maek.options.CPP = ['cl.exe', '/nologo', '/EHsc', '/Z7', '/std:c++20', '/W4', '/WX', '/MD'];
+		maek.options.CPP = ['cl.exe', '/nologo', '/EHsc', '/Z7', '/std:c++20', '/W4', '/WX', '/MD', '/D_CRT_SECURE_NO_WARNINGS'];
 		maek.options.LINK = ['link.exe', '/nologo', '/SUBSYSTEM:CONSOLE', '/DEBUG:FASTLINK', '/INCREMENTAL:NO'];
 
 		maek.options.CPPFlags = [
