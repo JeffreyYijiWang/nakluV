@@ -22,6 +22,7 @@ void Render::BackgroundPipeline::create(RTG& rtg, VkRenderPass render_pass, uint
 			.size = sizeof(Push),
 		};
 
+		//push constant for expose?
 		VkPipelineLayoutCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = 0,

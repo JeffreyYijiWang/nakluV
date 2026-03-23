@@ -117,9 +117,9 @@ void Render::PBRPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t su
 		};
 
 		VkPushConstantRange range{
-			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-			.offset = 0,
-			.size = sizeof(Push),
+		.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+		.offset = 0,
+		.size = sizeof(tone_map),
 		};
 
 		VkPipelineLayoutCreateInfo create_info{

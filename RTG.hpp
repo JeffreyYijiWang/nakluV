@@ -102,6 +102,10 @@ struct RTG {
 		uint8_t animation_settings = 0; // 0 play once, 1 loop, 2 paused
 		uint8_t past_animation_settings = 0; // 0 play once, 1 loop, 2 paused
 
+		//image settings 
+		float expose = 0.f;
+		int tone_mapping = 0; // 0 linear, 1 arcc, others/
+
 		//for configuration construction + management:
 		Configuration() = default;
 		void parse(int argc, char **argv); //parse command-line options; throws on error

@@ -96,9 +96,12 @@ struct Render : RTG::Application {
 			mat4 WORLD_FROM_LOCAL_NORMAL;
 		};
 		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
-		// no push constnat s
+		
+		// push constants
 		struct Push {
 			float time;
+			float expose;
+			int toneMapMode;
 		};
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -119,7 +122,12 @@ struct Render : RTG::Application {
 
 		//types for descriptors:
 
-		//no push constants
+		// push constants
+		struct tone_map {
+			float expose ;
+			int toneMapMode;
+		};
+
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
@@ -140,6 +148,10 @@ struct Render : RTG::Application {
 		//types for descriptors same as objects pipeline
 
 		//no push constants
+		struct tone_map {
+			float expose;
+			int toneMapMode;
+		};
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
 
@@ -175,9 +187,11 @@ struct Render : RTG::Application {
 			mat4 WORLD_FROM_LOCAL_NORMAL;
 		};
 		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
-		// no push constnat s
-		struct Push {
-			float time;
+		//push constants
+
+		struct tone_map {
+			float expose;
+			int toneMapMode;
 		};
 
 		VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -267,6 +281,9 @@ struct Render : RTG::Application {
 	std::function< void(InputEvent const&)> action;
 
 	float time = 0.0f;
+
+	float expose = rtg.configuration.expose;
+	int toneMapMode = rtg.configuration.tone_mapping;
 
 	//for selection between cameras: 
 	enum class CameraMode {

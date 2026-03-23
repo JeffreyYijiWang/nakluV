@@ -124,7 +124,6 @@ Render::Render(RTG& rtg_, Scene& scene_) : rtg(rtg_), scene(scene_) {
 	pbr_pipeline.create(rtg, render_pass, 0);
 
 
-
 	//create environment texture
 	if (scene.environment.source != "") {
 		int width, height, n;
@@ -1420,6 +1419,7 @@ void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 				};
 				vkCmdPushConstants(workspace.command_buffer, background_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
 			}
+		
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
 		
@@ -1446,6 +1446,8 @@ void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 			{//push time:
 				ObjectsPipeline::Push push{
 					.time = float(time),
+					.expose = float(expose),
+					.toneMapMode = int (toneMapMode),
 				};
 				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
 			}
@@ -1482,6 +1484,14 @@ void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 		if (!environment_instances.empty()) {//draw with the objects pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, environment_pipeline.handle);
 
+			{//push exposure
+				EnvironmentPipeline::tone_map tone{
+					.expose = float(expose),
+					.toneMapMode = int(toneMapMode),
+				};
+				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
+			}
+
 			{//use object_vertices (offset 0) as vertex buffer binding 0:
 				std::array<VkBuffer, 1>vertex_buffers{ object_vertices.handle };
 				std::array< VkDeviceSize, 1 > offsets{ 0 };
@@ -1489,7 +1499,7 @@ void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 
 			}
 
-			
+
 			//word descriptor set is still bound
 			//Camera descriptor set is still bound, but unused
 
@@ -1512,6 +1522,15 @@ void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 		}
 		if (!mirror_instances.empty()) {//draw with the objects pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, mirror_pipeline.handle);
+
+
+			{//push exposure
+				MirrorPipeline::tone_map tone{
+					.expose = float(expose),
+					.toneMapMode = int(toneMapMode),
+				};
+				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
+			}
 
 			{//use object_vertices as vertex buffer binding 0:
 				std::array<VkBuffer, 1>vertex_buffers{ object_vertices.handle };
@@ -1542,6 +1561,15 @@ void Render::render(RTG& rtg_, RTG::RenderParams const& render_params) {
 		}
 		if (!pbr_instances.empty()) {//draw with the objects pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pbr_pipeline.handle);
+
+			{//push exposure
+				PBRPipeline::tone_map tone{
+					.expose = float(expose),
+					.toneMapMode = int(toneMapMode),
+				};
+				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
+			}
+
 
 			{//use object_vertices as vertex buffer binding 0:
 				std::array<VkBuffer, 1>vertex_buffers{ object_vertices.handle };

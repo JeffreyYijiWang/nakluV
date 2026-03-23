@@ -12,6 +12,11 @@ layout(set=0,binding=0,std140) uniform World {
 	vec3 CAMERA_POSITION;
 	float ENVIRONMENT_MIPS;
 };
+layout(push_constant) uniform tone_map{
+	float expose;
+	int toneMapMode;
+};
+
 layout(set=0, binding=1) uniform samplerCube ENVIRONMENT;
 layout(set=2, binding=0) uniform sampler2D NORMAL;
 layout(set=2, binding=1) uniform sampler2D DISPLACEMENT;
@@ -64,5 +69,19 @@ void main() {
 
 	vec3 specular = radiance;
 
-	outColor = vec4((kD * albedo * irradiance/PI + specular) , 1.0f);
+	vec3 hdr = kD * albedo * irradiance/PI + specular;
+
+	vec3 exposed = exposure(hdr, expose);
+
+	vec3 mapped;
+	if (toneMapMode == 0) {
+		mapped = exposed;
+	}  else if(toneMapMode == 0) {
+		mapped = ACESFitted(exposed);
+	}
+	else{
+		mapped = gamma_correction(exposed);
+	}
+
+	outColor = vec4(mapped, 1.0f);
 }

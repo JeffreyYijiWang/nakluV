@@ -12,9 +12,14 @@ layout(set=0,binding=0,std140) uniform World {
 	vec3 SUN_ENERGY; //energy supplied by sun to a surface patch with normal = SUN_DIRECTION
 	vec3 CAMERA_POSITION;
 };
+
+layout(push_constant) uniform tone_map{
+	float expose;
+	int toneMapMode;
+};
+
 layout(set=0, binding=1) uniform samplerCube ENVIRONMENT;
 layout(set=2, binding=0) uniform sampler2D NORMAL;
-layout(set=2, binding=1) uniform sampler2D DISPLACEMENT;
 
 layout(location=0) in vec3 position;
 layout(location=1) in vec2 texCoord;
@@ -33,5 +38,17 @@ void main() {
 
 	vec3 viewDir = normalize(position - CAMERA_POSITION);
 	vec3 radiance = vec3(textureLod(ENVIRONMENT, reflect(viewDir,worldNormal),0.0f));
-	outColor = vec4((radiance), 1.0f); 
+
+	vec3 exposed = exposure(radiance, expose);
+
+	vec3 mapped;
+	if (toneMapMode == 0) {
+		mapped = exposed;
+	}  else if(toneMapMode == 0) {
+		mapped = ACESFitted(exposed);
+	}
+	else{
+		mapped = gamma_correction(exposed);
+	}
+	outColor = vec4(mapped, 1.0f); 
 }

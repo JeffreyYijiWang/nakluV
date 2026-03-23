@@ -92,12 +92,18 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 			set2_TEXTURE,
 		};
 
+		VkPushConstantRange range{
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.offset = 0,
+			.size = sizeof(tone_map),
+		};
+
 		VkPipelineLayoutCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = uint32_t(layouts.size()),
 			.pSetLayouts = layouts.data(),
-			.pushConstantRangeCount = 0,
-			.pPushConstantRanges = nullptr,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &range,
 		};
 
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));

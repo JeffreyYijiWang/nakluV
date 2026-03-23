@@ -1,4 +1,5 @@
 #define TONEMAP
+
 // The code in this file was originally written by Stephen Hill (@self_shadow)
 // from https://github.com/TheRealMJP/BakingLab/blob/master/BakingLab/ACES.hlsl
 const mat3 ACESInputMat = mat3(
@@ -17,6 +18,11 @@ vec3 RRTAndODTFit(vec3 v) {
     vec3 a = v * (v + 0.0245786) - 0.000090537;
     vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
     return a / b;
+}
+
+vec3 exposure( vec3 radience , float expose){
+    vec3 rad = pow(2.0, expose) * radience;
+    return rad;
 }
 
 vec3 ACESFitted(vec3 color) {

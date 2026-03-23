@@ -1,5 +1,9 @@
 #version 450 
 
+#ifndef TONEMAP
+	#include "tonemap.glsl"
+#endif
+
 
 layout(set=0,binding=0,std140) uniform World {
 	vec3 SKY_DIRECTION;
@@ -8,6 +12,12 @@ layout(set=0,binding=0,std140) uniform World {
 	vec3 SUN_ENERGY; //energy supplied by sun to a surface patch with normal = SUN_DIRECTION
 	vec3 CAMERA_POSITION;
 	float ENVIRONMENT_MIPS;
+};
+
+layout(push_constant) uniform push{
+	float time;
+	float expose;
+	int toneMapMode;
 };
 layout(set=0, binding=1) uniform samplerCube ENVIRONMENT;
 layout(set=2, binding=0) uniform sampler2D NORMAL;
@@ -40,5 +50,18 @@ void main() {
 
 	vec3 irradiance = textureLod(ENVIRONMENT, worldNormal, ENVIRONMENT_MIPS).rgb;
 
-	outColor = vec4((albedo * irradiance/PI), 1.0f);
+	vec3 hdr = albedo * irradiance / PI;
+
+	vec3 exposed = exposure(hdr, expose);
+
+	vec3 mapped;
+	if (toneMapMode == 0) {
+		mapped = exposed;
+	} else if(toneMapMode == 0) {
+		mapped = ACESFitted(exposed);
+	}
+	else{
+		mapped = gamma_correction(exposed);
+	}
+	outColor = vec4(mapped, 1.0f);
 }

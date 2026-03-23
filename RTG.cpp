@@ -128,6 +128,28 @@ void RTG::Configuration::parse(int argc, char **argv) {
 				throw std::runtime_error("--animation only takes loop, play-once, or paused as parameters");
 			}
 		}
+		else if (arg == "--exposure") {
+			if (argi + 1 >= argc) throw std::runtime_error("--expose requires a parameter (int) for 2*E .");
+			argi += 1;
+			expose = (float)atof(argv[argi]);
+		}
+		else if (arg == "--tone-map") {
+			argi += 1;
+			std::string settings = argv[argi];
+			if (settings == "linear") {
+				tone_mapping = 0;
+			}
+			else if (settings == "ACES") {
+				tone_mapping = 1;
+			}
+			else if (settings == "gamma") {
+				tone_mapping = 2;
+			}
+			else {
+				throw std::runtime_error("--tone-map only takes linear,gamma as parameters");
+			}
+		}
+
 		else {
 			throw std::runtime_error("Unrecognized argument '" + arg + "'.");
 		}
@@ -143,6 +165,8 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--camera <camera>", "View the scene through camera with name <camera>.");
 	callback("--culling < none , frustum, BVH >", "How the scene should be culled");
 	callback("--animation < loop | play-once | paused >", "Animate the scene with drivers starting paused, only plays once, or loops, default plays once");
+	callback("--exposure <E>", " changes the expose of the scene by 2*E tot eh radience");
+	callback("--tone-map <linear| ACES | paused >", "does tone mapping defaulting to linear, gamma, and others");
 }
 
 void RTG::Configuration::cube_usage(std::function< void(const char*, const char*) > const& callback) {

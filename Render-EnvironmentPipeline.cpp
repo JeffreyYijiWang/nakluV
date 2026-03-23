@@ -15,6 +15,8 @@ void Render::EnvironmentPipeline::create(RTG& rtg, VkRenderPass render_pass, uin
 	VkShaderModule vert_module = rtg.helpers.create_shader_module(vert_code);
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
+	
+
 	{// the set0_world layout hold workl dinfo in a unhiform buffer use in the fragment shader: and a environment cubemap
 		std::array< VkDescriptorSetLayoutBinding, 3> bindings{
 			VkDescriptorSetLayoutBinding{
@@ -65,7 +67,7 @@ void Render::EnvironmentPipeline::create(RTG& rtg, VkRenderPass render_pass, uin
 		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set1_Transforms));
 	}
 
-	{// the set2_TEXTURE layout has a single descriptor for a sampler2d used in the fragment shader:
+	{// the set2_TEXTURE layout has 2 descriptors for a sampler2D used in the fragment shader(normal, displacement):
 		std::array< VkDescriptorSetLayoutBinding, 2> bindings{
 		VkDescriptorSetLayoutBinding{
 				.binding = 0,
@@ -97,17 +99,24 @@ void Render::EnvironmentPipeline::create(RTG& rtg, VkRenderPass render_pass, uin
 			set1_Transforms,
 			set2_TEXTURE,
 		};
+
+		VkPushConstantRange range{
+			.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+			.offset = 0,
+			.size = sizeof(tone_map),
+		};
 		 
 		VkPipelineLayoutCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = uint32_t(layouts.size()),
 			.pSetLayouts = layouts.data(),
-			.pushConstantRangeCount = 0,
-			.pPushConstantRanges = nullptr,
+			.pushConstantRangeCount = 1,
+			.pPushConstantRanges = &range,
 		};
 
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
 	}
+
 
 	{ //create pipeline:
 
