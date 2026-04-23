@@ -131,28 +131,7 @@ vec3 lambertianDirect(ivec2 out_px) {
     return acc; // irradiance
 }
 
-vec3 lambertianMonteCarlo(ivec2 out_px) {
-    vec3 n = outDirectionFromPixel(out_px);
-     int inSize = inputSizeFromImage();
 
-    uint sampleCount = uint(max(params.ints.y, 1));
-
-    vec3 t, b;
-    makeONB(n, t, b);
-
-    vec3 acc = vec3(0.0);
-
-    for (uint i = 0u; i < sampleCount; ++i) {
-        vec2 xi = Hammersley(i, sampleCount);
-        vec3 local = sampleHemisphereCosine(xi);
-
-        vec3 wi = normalize(local.x * t + local.y * b + local.z * n);
-        vec3 Li = sampleCubeNearest(wi, inSize);
-        acc += Li;
-    }
-
-    return PI * acc / float(sampleCount); // irradiance
-}
 
 void main() {
 
@@ -166,11 +145,8 @@ void main() {
 	}
 
 	vec3 acc;
-    //if (outFaceInfo.params.w == 0) {
-        acc = lambertianDirect(out_px);
-    //} else {
-    //    acc = lambertianMonteCarlo(out_px);
-    //}
+
+    acc = lambertianDirect(out_px);
 
 	imageStore(outFace, out_px, vec4(acc, 1.0));
 }

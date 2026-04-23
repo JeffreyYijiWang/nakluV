@@ -92,7 +92,9 @@ const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');
 
 
 const cube_shaders = [
-	maek.GLSLC('cube.comp', 'spv/cube.comp', { GLSLCFlags: [...maek.DEFAULT_OPTIONS.GLSLCFlags, '-DLAMBERTIAN'] }),
+	  maek.GLSLC('brdf.comp', 'spv/brdf.comp'),
+    maek.GLSLC('lambert_irradiance.comp', 'spv/lambertian-irradiance.comp'),
+    maek.GLSLC('ggx.comp', 'spv/ggx.comp'),
 ];
 cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
 ////and link the executable in the same way as the viewer:

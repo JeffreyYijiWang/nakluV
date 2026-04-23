@@ -18,6 +18,8 @@ layout(push_constant) uniform tone_map{
 };
 
 layout(set=0, binding=1) uniform samplerCube ENVIRONMENT;
+layout(set=0, binding=2) uniform sampler2D BRDF_LUT;
+
 layout(set=2, binding=0) uniform sampler2D NORMAL;
 layout(set=2, binding=1) uniform sampler2D DISPLACEMENT;
 layout(set=2, binding=2) uniform sampler2D ALBEDO;
@@ -40,36 +42,47 @@ vec3 FresnelSchlickRoughness(float cosTheta, float roughness, vec3 F0)
 }
 
 void main() {
-	vec3 F0 = vec3(0.04,0.04,0.04);
+
+	  float roughness = clamp(texture(ROUGHNESS, texCoord).r, 0.04, 1.0);
+    float metalness = clamp(texture(METALNESS, texCoord).r, 0.0, 1.0);
 	vec3 albedo = texture(ALBEDO, texCoord).rgb;
-	float metalness = texture(METALNESS, texCoord).r;
+		vec3 F0 = mix(vec3(0.04), albedo, metalness);
+
 	//tint for metallic surface
 	F0 = mix(F0, albedo, metalness);
+
 	// Sample the normal map and convert from [0,1] to [-1,1]
+
     vec3 normal_rgb = texture(NORMAL, texCoord).rgb; 
     vec3 tangentNormal = normalize(normal_rgb * 2.0 - 1.0); 
 
     // Transform the normal from tangent space to world space
     vec3 worldNormal = TBN * tangentNormal;
 
-	float roughness = texture(ROUGHNESS, texCoord).r * ENVIRONMENT_MIPS;
+
 
 	vec3 viewDir = normalize(CAMERA_POSITION - position);
+	    float NdotV = max(dot(worldNormal, viewDir), 0.0);
 	vec3 radiance = textureLod(ENVIRONMENT, reflect(-viewDir,worldNormal), roughness).rgb;
 	vec3 irradiance = textureLod(ENVIRONMENT, worldNormal, ENVIRONMENT_MIPS).rgb;
 
-	vec2 brdfCoord = vec2(max(dot(viewDir, worldNormal), 0.0),roughness);
+	vec2 brdfCoord = vec2(NdotV ,roughness);
+    vec2 brdf = texture(BRDF_LUT, vec2(NdotV, roughness)).rg;
 
-
-	vec3 F = FresnelSchlickRoughness(max(dot(viewDir, worldNormal), 0.0), roughness, F0);
+	vec3 F = FresnelSchlickRoughness(NdotV , roughness, F0);
 	vec3 kS = F;
 	vec3 kD = 1.0 - kS;
 	// vec3 kD = mix(vec3(1.0) - F, vec3(0.0), metalness);
 	kD *= 1.0 - metalness;
 
-	vec3 specular = radiance;
+   // Reflection direction for specular IBL
+   vec3 R = reflect(-viewDir, worldNormal);
+	  float prefilterMip = roughness * ENVIRONMENT_MIPS;
+    vec3 prefilteredColor = textureLod(ENVIRONMENT, R, prefilterMip).rgb;
 
-	vec3 hdr = kD * albedo * irradiance/PI + specular;
+	vec3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+   vec3 diffuse = kD * albedo * irradiance / PI;
+	vec3 hdr = diffuse + specular;
 
 	vec3 exposed = exposure(hdr, expose);
 

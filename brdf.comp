@@ -1,0 +1,105 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(rg16f, binding = 0) uniform writeonly image2D outLut;
+
+layout(push_constant) uniform Push {
+    uint size;
+    uint numSamples;
+} pc;
+
+const float PI = 3.14159265359;
+
+//https://www.shadertoy.com/view/4lscWj 
+float RadicalInverse_VdC(uint b)
+{
+    b = (b << 16u) | (b >> 16u);
+    b = ((b & 0x55555555u) << 1u) | ((b & 0xAAAAAAAAu) >> 1u);
+    b = ((b & 0x33333333u) << 2u) | ((b & 0xCCCCCCCCu) >> 2u);
+    b = ((b & 0x0F0F0F0Fu) << 4u) | ((b & 0xF0F0F0F0u) >> 4u);
+    b = ((b & 0x00FF00FFu) << 8u) | ((b & 0xFF00FF00u) >> 8u);
+    
+    float radicalInverseVDC = float(b) * 2.3283064365386963e-10;
+    return radicalInverseVDC;
+}
+
+vec2 Hammersley(float i, float numSamples)
+{   
+    uint b = uint(i);
+    
+    return vec2((i / numSamples), RadicalInverse_VdC(b));
+} 
+
+vec3 ImportanceSampleGGX(vec2 Xi, float roughness, vec3 N)
+{
+    float a = roughness * roughness;
+    float a2 = a * a;
+
+    float phi = 2.0 * PI * Xi.x;
+    float cosTheta = sqrt((1.0 - Xi.y) / (1.0 + (a2 - 1.0) * Xi.y));
+    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
+
+    vec3 Ht = vec3(
+        sinTheta * cos(phi),
+        sinTheta * sin(phi),
+        cosTheta
+    );
+
+    vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangentX = normalize(cross(up, N));
+    vec3 tangentY = cross(N, tangentX);
+
+    return normalize(tangentX * Ht.x + tangentY * Ht.y + N * Ht.z);
+}
+
+float GeometrySchlickGGX_IBL(float NoV, float roughness)
+{
+    float a = roughness * roughness;
+    float k = a * 0.5; 
+    return NoV / (NoV * (1.0 - k) + k);
+}
+
+float GeometrySmith_IBL(float roughness, float NoV, float NoL)
+{
+    return GeometrySchlickGGX_IBL(NoV, roughness) *
+           GeometrySchlickGGX_IBL(NoL, roughness);
+}
+
+void main()
+{
+    uvec2 gid = gl_GlobalInvocationID.xy;
+    if (gid.x >= pc.size || gid.y >= pc.size) return;
+
+    float NoV = (float(gid.x) + 0.5) / float(pc.size);
+    float roughness = (float(gid.y) + 0.5) / float(pc.size);
+
+    vec3 V = vec3(sqrt(max(0.0, 1.0 - NoV * NoV)), 0.0, NoV);
+    vec3 N = vec3(0.0, 0.0, 1.0);
+
+    float A = 0.0;
+    float B = 0.0;
+
+    for (uint i = 0u; i < pc.numSamples; ++i)
+    {
+        vec2 Xi = Hammersley(i, pc.numSamples);
+        vec3 H = ImportanceSampleGGX(Xi, roughness, N);
+        vec3 L = normalize(2.0 * dot(V, H) * H - V);
+
+        float NoL = max(L.z, 0.0);
+        float NoH = max(H.z, 0.0);
+        float VoH = max(dot(V, H), 0.0);
+
+        if (NoL > 0.0)
+        {
+            float G = GeometrySmith_IBL(roughness, NoV, NoL);
+            float G_Vis = (NoH > 0.0 && NoV > 0.0) ? (G * VoH / (NoH * NoV)) : 0.0;
+            float Fc = pow(1.0 - VoH, 5.0);
+
+            A += (1.0 - Fc) * G_Vis;
+            B += Fc * G_Vis;
+        }
+    }
+
+    vec2 brdf = vec2(A, B) / float(pc.numSamples);
+    imageStore(outLut, ivec2(gid), vec4(brdf, 0.0, 1.0));
+}

@@ -1,0 +1,90 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// exact input texels from a 2D array view of the cubemap
+layout(binding = 0) uniform sampler2DArray envFaces;
+
+// writable output cubemap face layers
+layout(rgba32f, binding = 1) uniform writeonly image2DArray outCube;
+
+layout(push_constant) uniform PushConstants {
+    uint outSize;
+} pc;
+
+const float PI = 3.14159265358979323846;
+
+float areaElement(float x, float y)
+{
+    return atan(x * y, sqrt(x * x + y * y + 1.0));
+}
+
+float cubemapTexelSolidAngle(uint x, uint y, uint size)
+{
+    float s = float(size);
+
+    float u0 = 2.0 * (float(x)     / s) - 1.0;
+    float v0 = 2.0 * (float(y)     / s) - 1.0;
+    float u1 = 2.0 * (float(x + 1) / s) - 1.0;
+    float v1 = 2.0 * (float(y + 1) / s) - 1.0;
+
+    return
+        areaElement(u0, v0) -
+        areaElement(u0, v1) -
+        areaElement(u1, v0) +
+        areaElement(u1, v1);
+}
+
+vec3 cubemapTexelDirection(uint face, uint x, uint y, uint size)
+{
+    float u = 2.0 * ((float(x) + 0.5) / float(size)) - 1.0;
+    float v = 2.0 * ((float(y) + 0.5) / float(size)) - 1.0;
+
+    vec3 dir;
+
+    // Keep this convention consistent everywhere in your utility
+    switch (face) {
+        case 0u: dir = vec3( 1.0, -v, -u); break; // +X
+        case 1u: dir = vec3(-1.0, -v,  u); break; // -X
+        case 2u: dir = vec3( u,   1.0,  v); break; // +Y
+        case 3u: dir = vec3( u,  -1.0, -v); break; // -Y
+        case 4u: dir = vec3( u,  -v,   1.0); break; // +Z
+        default: dir = vec3(-u,  -v,  -1.0); break; // -Z
+    }
+
+    return normalize(dir);
+}
+
+void main()
+{
+    uvec3 gid = gl_GlobalInvocationID;
+    if (gid.x >= pc.outSize || gid.y >= pc.outSize || gid.z >= 6u) return;
+
+    uint outFace = gid.z;
+    vec3 N = cubemapTexelDirection(outFace, gid.x, gid.y, pc.outSize);
+
+    ivec3 inDims = textureSize(envFaces, 0);
+    uint inSize = uint(inDims.x); // assume square cubemap faces
+
+    vec3 sum = vec3(0.0);
+
+    for (uint inFace = 0u; inFace < 6u; ++inFace) {
+        for (uint iy = 0u; iy < inSize; ++iy) {
+            for (uint ix = 0u; ix < inSize; ++ix) {
+                vec3 L = cubemapTexelDirection(inFace, ix, iy, inSize);
+                float ndotl = max(dot(N, L), 0.0);
+                if (ndotl <= 0.0) continue;
+
+                vec3 Li = texelFetch(envFaces, ivec3(int(ix), int(iy), int(inFace)), 0).rgb;
+                float dOmega = cubemapTexelSolidAngle(ix, iy, inSize);
+
+                sum += Li * ndotl * dOmega;
+            }
+        }
+    }
+
+
+    vec3 outValue = sum / PI;
+
+    imageStore(outCube, ivec3(gid), vec4(outValue, 1.0));
+}
