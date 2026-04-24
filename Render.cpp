@@ -172,7 +172,8 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 				}
 				break;
 			}
-			if (cur_width == last_width >> 2 && cur_height == last_height >> 2)
+			if (cur_width != std::max(1, last_width >> 1) ||
+				cur_height != std::max(1, last_height >> 1))
 			{
 				throw std::runtime_error("Mip not properly resized");
 			}
@@ -213,7 +214,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			Helpers::Unmapped, 6, mip_levels);
 
-		rtg.helpers.transfer_to_image_cube(rgb_image.data(), sizeof(rgb_image[0]) * rgb_image.size(), World_environment, 6);
+		rtg.helpers.transfer_to_image_cube(rgb_image.data(), sizeof(rgb_image[0]) * rgb_image.size(), World_environment, mip_levels);
 
 		// free image:
 		for (unsigned char *image : images)
@@ -425,7 +426,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 
 			vkUpdateDescriptorSets(rtg.device, 1, &write, 0, nullptr);
 		}
-	std::cout << "about to render tranfer ommand buffer: " << (void*)rtg.helpers.transfer_command_buffer << std::endl;
+		std::cout << "about to render tranfer ommand buffer: " << (void *)rtg.helpers.transfer_command_buffer << std::endl;
 		VK(vkResetCommandBuffer(rtg.helpers.transfer_command_buffer, 0));
 
 		VkCommandBufferBeginInfo begin_info{
@@ -1414,7 +1415,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 	// refsol::Tutorial_render_record_blank_frame(rtg, render_pass, framebuffer, &workspace.command_buffer);
 
 	// reset the command buffer(clear old commands):
-	std::cout << "about to reset command buffer: 1 " << (void*)workspace.command_buffer<< std::endl;
+	std::cout << "about to reset command buffer: 1 " << (void *)workspace.command_buffer << std::endl;
 	VK(vkResetCommandBuffer(workspace.command_buffer, 0));
 	{ // begin recording
 		VkCommandBufferBeginInfo begin_info{
@@ -1703,7 +1704,6 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
-
 
 		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
 		{
