@@ -17,8 +17,12 @@ layout(push_constant) uniform tone_map{
 	float expose;
 	int toneMapMode;
 };
-layout(set=0, binding=1) uniform samplerCube ENVIRONMENT;
+layout(set=0, binding=1) uniform samplerCube IRRADIANCE_MAP;
+layout(set=0, binding=2) uniform samplerCube ENVIRONMENT;
+layout(set=0, binding=3) uniform sampler2D BRDF_LUT;
+
 layout(set=2, binding=0) uniform sampler2D NORMAL;
+layout(set=2, binding=1) uniform sampler2D DISPLACEMENT;
 
 
 layout(location=0) in vec3 position;
@@ -33,7 +37,7 @@ void main() {
     vec3 tangentNormal = normalize(normal_rgb * 2.0 - 1.0); 
 
     // Transform the normal from tangent space to world space
-    vec3 worldNormal = TBN * tangentNormal; 
+    vec3 worldNormal = normalize(TBN * tangentNormal); 
 
 	vec3 radiance = vec3(textureLod(ENVIRONMENT, worldNormal, 0.0f));
 

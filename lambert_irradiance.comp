@@ -47,22 +47,54 @@ vec3 CubemapDirectionFromFaceUV(uint face, uint x, uint y, uint size)
     }
     return normalize(dir);
 }
-vec3 sampleHemisphereCosine(vec2 xi) {
-    float phi = 2.0 * PI * xi.y;
-    float cosTheta = sqrt(1.0 - xi.x);
-    float sinTheta = sqrt(max(0.0, 1.0 - cosTheta * cosTheta));
-    return vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);
-}
+
 void main()
 {
-    uvec3 gid = gl_GlobalInvocationID;
+    uvec3 gid = gl_GlobalInvocationID.xyz;
     if (gid.x >= pc.size || gid.y >= pc.size || gid.z >= 6u) return;
 
-    vec3 c = vec3(
-        float(gid.x) / float(pc.size - 1u),
-        float(gid.y) / float(pc.size - 1u),
-        float(gid.z) / 5.0
-    );
+    vec3 N = CubemapDirectionFromFaceUV(gid.z, gid.x, gid.y, pc.size);
 
-    imageStore(outCube, ivec3(gid), vec4(c, 1.0));
+    vec3 up = abs(N.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, N));
+    vec3 bitangent = cross(N, tangent);
+
+    vec3 acc = vec3(0.0);
+
+    for (uint i = 0u; i < pc.numSamples; ++i)
+    {
+        vec2 Xi = Hammersley(i, pc.numSamples);
+
+        float cosTheta = sqrt(1.0 - Xi.x);
+        float sinTheta = sqrt(Xi.x);
+        float phi = 2.0 * PI * Xi.y;
+
+        vec3 hemiLocal = vec3(
+            cos(phi) * sinTheta,
+            cosTheta,
+            sin(phi) * sinTheta
+        );
+
+        vec3 L = normalize(
+            hemiLocal.x * tangent +
+            hemiLocal.y * N +
+            hemiLocal.z * bitangent
+        );
+
+        float pdf = max(dot(N, L), 0.0) / PI;
+
+        ivec2 baseSize = textureSize(envMap, 0);
+        float resolution = float(baseSize.x);
+        float saTexel = 4.0 * PI / (6.0 * resolution * resolution);
+        float saSample = 1.0 / (float(pc.numSamples) * pdf + 1e-6);
+
+        float mipLevel = 0.5 * log2(saSample / saTexel);
+        mipLevel = max(mipLevel, 0.0);
+
+        acc += textureLod(envMap, L, mipLevel).rgb;
+    }
+
+    vec3 irradiance =PI* acc / float(pc.numSamples);
+
+    imageStore(outCube, ivec3(gid), vec4(irradiance, 1.0));
 }

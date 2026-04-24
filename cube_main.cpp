@@ -46,7 +46,8 @@ struct GPUCubeMap
 {
 	Helpers::AllocatedImage image;
 	VkImageView cube_view = VK_NULL_HANDLE;
-	std::vector<VkImageView> storage_views; // one per writable mip
+	VkImageView sampled_array_view = VK_NULL_HANDLE; // for sampler2DArray
+	std::vector<VkImageView> storage_views;			 // one per writable mip
 	VkSampler sampler = VK_NULL_HANDLE;
 
 	void destroy(RTG &rtg)
@@ -89,6 +90,29 @@ static VkImageView make_cube_view(RTG &rtg, Helpers::AllocatedImage const &image
 	VK(vkCreateImageView(rtg.device, &ci, nullptr, &view));
 	return view;
 }
+
+VkImageView make_sampled_array_view(RTG &rtg, Helpers::AllocatedImage const &image, uint32_t mip_count)
+{
+	VkImageView view = VK_NULL_HANDLE;
+
+	VkImageViewCreateInfo create_info{
+		.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+		.image = image.handle,
+		.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+		.format = image.format,
+		.subresourceRange{
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0,
+			.levelCount = mip_count,
+			.baseArrayLayer = 0,
+			.layerCount = 6,
+		},
+	};
+
+	VK(vkCreateImageView(rtg.device, &create_info, nullptr, &view));
+	return view;
+}
+
 
 static VkImageView make_storage_view_for_mip(RTG &rtg, Helpers::AllocatedImage const &image, uint32_t mip)
 {
@@ -273,6 +297,8 @@ static VkDescriptorSet make_ibl_descriptor(
 		.imageView = env_cube_view,
 		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 	};
+
+	
 
 	VkDescriptorImageInfo out_info{
 		.sampler = VK_NULL_HANDLE,
@@ -778,12 +804,13 @@ int main(int argc, char **argv)
 		generate_cubemap_mips(rtg, env_gpu.image, in_size, env_mip_count);
 
 		env_gpu.cube_view = make_cube_view(rtg, env_gpu.image, env_mip_count);
+		// env_gpu.sampled_array_view = make_sampled_array_view(rtg, env_gpu.image, env_mip_count);
 		env_gpu.sampler = make_cube_sampler(rtg, env_mip_count);
 		bool do_lambert = !rtg.configuration.lambert_out_image.empty();
 		bool do_ggx = !rtg.configuration.ggx_out_image.empty();
 
 		std::cout << "this is the size: " << in_size << std::endl;
-		uint32_t lambert_size = 1024;
+		uint32_t lambert_size = 16;
 		uint32_t ggx_levels = 0;
 		uint32_t ggx_base_size = 0;
 
@@ -947,7 +974,7 @@ int main(int argc, char **argv)
 
 			CubePipeline::IrradiancePush ipush{
 				.size = lambert_size,
-				.numSamples = 2048,
+				.numSamples = 4096 * 16,
 			};
 
 			vkCmdPushConstants(
@@ -995,7 +1022,7 @@ int main(int argc, char **argv)
 
 				CubePipeline::SpecularPush spush{
 					.size = mip_size,
-					.numSamples = 1024,
+					.numSamples = 4096 * 16,
 					.roughness = roughness,
 					.pad = 0.0f,
 				};

@@ -88,15 +88,19 @@ const pbr_shaders = [
 ];
 main_objs.push(maek.CPP('Render-PBRPipeline.cpp', undefined, { depends: [...pbr_shaders] }));
 
-const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');
-
 
 const cube_shaders = [
 	  maek.GLSLC('brdf.comp', 'spv/brdf.comp'),
     maek.GLSLC('lambert_irradiance.comp', 'spv/lambertian-irradiance.comp'),
     maek.GLSLC('ggx.comp', 'spv/ggx.comp'),
 ];
-cube_objs.push(maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] }));
+
+const cube_pipeline_obj =
+    maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] });
+main_objs.push(cube_pipeline_obj);
+cube_objs.push(cube_pipeline_obj);
+
+const viewer_exe = maek.LINK([...main_objs], 'bin/viewer');
 ////and link the executable in the same way as the viewer:
 const cube_exe = maek.LINK([...cube_objs], 'bin/cube');
 

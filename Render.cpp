@@ -467,7 +467,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 
 			CubePipeline::IrradiancePush push{
 				.size = irradiance_size,
-				.numSamples = 2048*16,
+				.numSamples = 2048 * 16,
 			};
 
 			vkCmdPushConstants(
@@ -552,7 +552,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 	}
 
 	{ // environment BRDF LUT
-		uint32_t brdf_size = 400;
+		uint32_t brdf_size = 256;
 
 		World_environment_brdf_lut = rtg.helpers.create_image(
 			VkExtent2D{.width = brdf_size, .height = brdf_size},
@@ -961,17 +961,21 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 				},
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+					.pNext = nullptr, // 1. Positioned correctly
 					.dstSet = workspace.World_descriptors,
-					.dstBinding = 1,
+					.dstBinding = 1, // 2. Positioned correctly
+					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-					.pImageInfo = &World_irradiance_info,
+					.pImageInfo = &World_irradiance_info, // 3. This is now in the right "slot"
+					.pBufferInfo = nullptr,				  // 4. Explicitly tell it the buffer slot is empty
+					.pTexelBufferView = nullptr			  // 5. Explicitly tell it the texel slot is empty
 				},
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.pNext = nullptr, // 1. Positioned correctly
 					.dstSet = workspace.World_descriptors,
-					.dstBinding = 1, // 2. Positioned correctly
+					.dstBinding = 2, // 2. Positioned correctly
 					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -984,7 +988,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.pNext = nullptr, // 1. Positioned correctly
 					.dstSet = workspace.World_descriptors,
-					.dstBinding = 2,
+					.dstBinding = 3,
 					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1708,10 +1712,6 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 	// refsol::Tutorial_render_record_blank_frame(rtg, render_pass, framebuffer, &workspace.command_buffer);
 
 	// reset the command buffer(clear old commands):
-<<<<<<< Updated upstream
-	std::cout << "about to reset command buffer: 1 " << (void *)workspace.command_buffer << std::endl;
-=======
->>>>>>> Stashed changes
 	VK(vkResetCommandBuffer(workspace.command_buffer, 0));
 	{ // begin recording
 		VkCommandBufferBeginInfo begin_info{
@@ -1809,6 +1809,33 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.World_src.handle, workspace.World.handle, 1, &copy_region);
 	}
 
+	if (!lines_vertices.empty())
+	{ // draw with the lines pipeline;
+		vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
+
+		{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
+			std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
+			std::array<VkDeviceSize, 1> offsets{0};
+			vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+		}
+
+		{ // bind teh camera descript set:
+			std::array<VkDescriptorSet, 1> descriptor_sets{
+				workspace.Camera_descriptors, // 0. camera
+			};
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,								  // command_buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+				lines_pipeline.layout,									  // pipline layout
+				0,														  // first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
+				0, nullptr												  // dynamics offsets count, ptr
+			);
+		}
+
+		// draw line vertice
+		vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
+	}
 	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
 	{ // upload object transforms:
 		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size() + pbr_instances.size()) * sizeof(ObjectsPipeline::Transform);
@@ -2001,36 +2028,6 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
 
-<<<<<<< Updated upstream
-=======
-		if (!lines_vertices.empty())
-		{ // draw with the lines pipeline;
-			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
-
-			{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
-				std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
-				std::array<VkDeviceSize, 1> offsets{0};
-				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
-			}
-
-			{ // bind teh camera descript set:
-				std::array<VkDescriptorSet, 1> descriptor_sets{
-					workspace.Camera_descriptors, // 0. camera
-				};
-				vkCmdBindDescriptorSets(
-					workspace.command_buffer,								  // command_buffer
-					VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
-					lines_pipeline.layout,									  // pipline layout
-					0,														  // first set
-					uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
-					0, nullptr												  // dynamics offsets count, ptr
-				);
-			}
-
-			// draw line vertice
-			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
-		}
->>>>>>> Stashed changes
 		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
 		{
 			// bind Transforms descriptor set:

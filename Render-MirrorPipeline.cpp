@@ -5,30 +5,39 @@
 
 static uint32_t vert_code[] =
 #include "spv/mirror.vert.inl"
-;
+	;
 
 static uint32_t frag_code[] =
 #include "spv/mirror.frag.inl"
-;
+	;
 
-void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t subpass) {
+void Render::MirrorPipeline::create(RTG &rtg, VkRenderPass render_pass, uint32_t subpass)
+{
 	VkShaderModule vert_module = rtg.helpers.create_shader_module(vert_code);
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
-	{// the set0_world layout hold workl dinfo in a unhiform buffer use in the fragment shader: and a environment cubemap
-		std::array< VkDescriptorSetLayoutBinding, 2> bindings{
+	{ // the set0_world layout hold workl dinfo in a unhiform buffer use in the fragment shader: and a environment cubemap
+		std::array<VkDescriptorSetLayoutBinding, 4> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			},
-			 VkDescriptorSetLayoutBinding{
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+			VkDescriptorSetLayoutBinding{
 				.binding = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			},
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+			VkDescriptorSetLayoutBinding{
+				.binding = 2,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+			VkDescriptorSetLayoutBinding{
+				.binding = 3,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
 		};
 
 		VkDescriptorSetLayoutCreateInfo create_info{
@@ -40,14 +49,13 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set0_World));
 	}
 
-	{// the set1 Trusaform layout holds an array of transform in storage buffer use in the vertex shader
-		std::array< VkDescriptorSetLayoutBinding, 1> bindings{
+	{ // the set1 Trusaform layout holds an array of transform in storage buffer use in the vertex shader
+		std::array<VkDescriptorSetLayoutBinding, 1> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT
-			},
+				.stageFlags = VK_SHADER_STAGE_VERTEX_BIT},
 		};
 
 		VkDescriptorSetLayoutCreateInfo create_info{
@@ -59,20 +67,18 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set1_Transforms));
 	}
 
-	{// the set2_TEXTURE layout //the set2_TEXTURE layout has 2 descriptors for a sampler2D used in the fragment shader(normal, displacement):
-		std::array< VkDescriptorSetLayoutBinding, 2> bindings{
+	{ // the set2_TEXTURE layout //the set2_TEXTURE layout has 2 descriptors for a sampler2D used in the fragment shader(normal, displacement):
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			},
-			 VkDescriptorSetLayoutBinding{
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+			VkDescriptorSetLayoutBinding{
 				.binding = 1,
 				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				.descriptorCount = 1,
-				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
-			},
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
 		};
 
 		VkDescriptorSetLayoutCreateInfo create_info{
@@ -84,10 +90,9 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 		VK(vkCreateDescriptorSetLayout(rtg.device, &create_info, nullptr, &set2_TEXTURE));
 	}
 
-
-	{ //create pipline layout
-		std::array < VkDescriptorSetLayout, 3 > layouts{
-			set0_World, 
+	{ // create pipline layout
+		std::array<VkDescriptorSetLayout, 3> layouts{
+			set0_World,
 			set1_Transforms,
 			set2_TEXTURE,
 		};
@@ -109,10 +114,10 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 		VK(vkCreatePipelineLayout(rtg.device, &create_info, nullptr, &layout));
 	}
 
-	{ //create pipeline:
+	{ // create pipeline:
 
-	  //shader code for vertex and fragment pipleine states:
-		std::array< VkPipelineShaderStageCreateInfo, 2 > stages{
+		// shader code for vertex and fragment pipleine states:
+		std::array<VkPipelineShaderStageCreateInfo, 2> stages{
 			VkPipelineShaderStageCreateInfo{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_VERTEX_BIT,
@@ -128,8 +133,8 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 
 		};
 
-		//the view port and scissor state will be set at run time for the pipelines:
-		std::vector< VkDynamicState > dynamic_states{
+		// the view port and scissor state will be set at run time for the pipelines:
+		std::vector<VkDynamicState> dynamic_states{
 			VK_DYNAMIC_STATE_VIEWPORT,
 			VK_DYNAMIC_STATE_SCISSOR,
 		};
@@ -139,11 +144,11 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 			.pDynamicStates = dynamic_states.data(),
 		};
 
-		// this pipeline will draw triangles 
+		// this pipeline will draw triangles
 		VkPipelineInputAssemblyStateCreateInfo input_assembly_state{
-				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-				.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-				.primitiveRestartEnable = VK_FALSE,
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+			.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+			.primitiveRestartEnable = VK_FALSE,
 		};
 
 		// THIS PIPLEIN WILL RENER TO ONE VIEW PORT AND SCISSOR RECTANGEL
@@ -153,7 +158,7 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 			.scissorCount = 1,
 		};
 
-		//the rasterizer will cull back face and fill polygons 
+		// the rasterizer will cull back face and fill polygons
 		VkPipelineRasterizationStateCreateInfo rasterization_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 			.depthClampEnable = VK_FALSE,
@@ -165,14 +170,14 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 			.lineWidth = 1.0f,
 		};
 
-		//mu;tisampling will be disable one sample per pixel
+		// mu;tisampling will be disable one sample per pixel
 		VkPipelineMultisampleStateCreateInfo multisample_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
 			.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
 			.sampleShadingEnable = VK_FALSE,
 		};
 
-		//depth test will be less, and the stencil test will be disabled 
+		// depth test will be less, and the stencil test will be disabled
 		VkPipelineDepthStencilStateCreateInfo depth_stencil_state{
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
 			.depthTestEnable = VK_TRUE,
@@ -182,9 +187,8 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 			.stencilTestEnable = VK_FALSE,
 		};
 
-
-		//there will be one color attachment with blender disabled 
-		std::array < VkPipelineColorBlendAttachmentState, 1> attachment_states{
+		// there will be one color attachment with blender disabled
+		std::array<VkPipelineColorBlendAttachmentState, 1> attachment_states{
 			VkPipelineColorBlendAttachmentState{
 				.blendEnable = VK_FALSE,
 				.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
@@ -196,11 +200,10 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 			.logicOpEnable = VK_FALSE,
 			.attachmentCount = uint32_t(attachment_states.size()),
 			.pAttachments = attachment_states.data(),
-			.blendConstants{0.0f, 0.0f, 0.0f,0.0f},
+			.blendConstants{0.0f, 0.0f, 0.0f, 0.0f},
 		};
 
-
-		//alll of the above structures get bundled together into one very large create_info: 
+		// alll of the above structures get bundled together into one very large create_info:
 		VkGraphicsPipelineCreateInfo create_info{
 			.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
 			.stageCount = uint32_t(stages.size()),
@@ -221,32 +224,38 @@ void Render::MirrorPipeline::create(RTG& rtg, VkRenderPass render_pass, uint32_t
 		VK(vkCreateGraphicsPipelines(rtg.device, VK_NULL_HANDLE, 1, &create_info, nullptr, &handle));
 	}
 
-	//modules no longer needed now that pipline ise created:
+	// modules no longer needed now that pipline ise created:
 	vkDestroyShaderModule(rtg.device, frag_module, nullptr);
 	vkDestroyShaderModule(rtg.device, vert_module, nullptr);
 }
 
-void Render::MirrorPipeline::destroy(RTG& rtg) {
+void Render::MirrorPipeline::destroy(RTG &rtg)
+{
 
-	if (set2_TEXTURE != VK_NULL_HANDLE) {
+	if (set2_TEXTURE != VK_NULL_HANDLE)
+	{
 		vkDestroyDescriptorSetLayout(rtg.device, set2_TEXTURE, nullptr);
 		set2_TEXTURE = VK_NULL_HANDLE;
 	}
-	if (set1_Transforms != VK_NULL_HANDLE) {
+	if (set1_Transforms != VK_NULL_HANDLE)
+	{
 		vkDestroyDescriptorSetLayout(rtg.device, set1_Transforms, nullptr);
 		set1_Transforms = VK_NULL_HANDLE;
 	}
-	if (set0_World != VK_NULL_HANDLE) {
+	if (set0_World != VK_NULL_HANDLE)
+	{
 		vkDestroyDescriptorSetLayout(rtg.device, set0_World, nullptr);
 		set0_World = VK_NULL_HANDLE;
 	}
 
-	if (layout != VK_NULL_HANDLE) {
+	if (layout != VK_NULL_HANDLE)
+	{
 		vkDestroyPipelineLayout(rtg.device, layout, nullptr);
 		handle = VK_NULL_HANDLE;
 	}
 
-	if (handle != VK_NULL_HANDLE) {
+	if (handle != VK_NULL_HANDLE)
+	{
 		vkDestroyPipeline(rtg.device, handle, nullptr);
 		handle = VK_NULL_HANDLE;
 	}
