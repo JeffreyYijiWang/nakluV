@@ -61,21 +61,20 @@ void main() {
 	vec3 viewDir = normalize(CAMERA_POSITION - position);
 	    float NdotV = max(dot(worldNormal, viewDir), 0.0);
 	
-	float roughness = clamp(texture(ROUGHNESS, texCoord).r, 0.04, 1.0);
+		float roughness = texture(ROUGHNESS, texCoord).r;
 
-float mip = roughness * max(ENVIRONMENT_MIPS - 1.0, 0.0);
+float mip = roughness * float(ENVIRONMENT_MIPS);
 
 vec3 radiance = textureLod(
     ENVIRONMENT,
     normalize(reflect(-viewDir, worldNormal)),
     mip
 ).rgb;
-	vec3 irradiance = textureLod(ENVIRONMENT, worldNormal, ENVIRONMENT_MIPS).rgb;
+	vec3 irradiance = textureLod(IRRADIANCE_MAP, worldNormal,0.0).rgb;
 
 
 	vec2 brdfCoord = vec2(NdotV ,roughness);
     vec2 brdf = texture(BRDF_LUT, vec2(NdotV, roughness)).rg;
-
 	vec3 F = FresnelSchlickRoughness(NdotV , roughness, F0);
 	vec3 kS = F;
 	vec3 kD = 1.0 - kS;
@@ -83,8 +82,8 @@ vec3 radiance = textureLod(
 	kD *= 1.0 - metalness;
 
 
-	vec3 specular = radiance * (F * brdf.x + brdf.y);
-   vec3 diffuse = kD * albedo * irradiance ;
+	vec3 specular = radiance * (F * brdf.r + brdf.g);;
+   vec3 diffuse = kD * albedo * irradiance/PI;
 	vec3 hdr = diffuse + specular;
 
 	vec3 exposed = exposure(hdr, expose);
@@ -99,5 +98,5 @@ vec3 radiance = textureLod(
 		mapped = gamma_correction(exposed);
 	}
 
-	outColor = vec4(hdr, 1.0f);
+	outColor = vec4(mapped, 1.0f);
 }

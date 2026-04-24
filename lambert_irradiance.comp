@@ -94,7 +94,7 @@ void main()
         acc += textureLod(envMap, L, mipLevel).rgb;
     }
 
-    vec3 irradiance =PI* acc / float(pc.numSamples);
+    vec3 irradiance = acc / float(pc.numSamples);
 
     imageStore(outCube, ivec3(gid), vec4(irradiance, 1.0));
 }

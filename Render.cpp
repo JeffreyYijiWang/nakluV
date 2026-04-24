@@ -1809,33 +1809,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.World_src.handle, workspace.World.handle, 1, &copy_region);
 	}
 
-	if (!lines_vertices.empty())
-	{ // draw with the lines pipeline;
-		vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
 
-		{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
-			std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
-			std::array<VkDeviceSize, 1> offsets{0};
-			vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
-		}
-
-		{ // bind teh camera descript set:
-			std::array<VkDescriptorSet, 1> descriptor_sets{
-				workspace.Camera_descriptors, // 0. camera
-			};
-			vkCmdBindDescriptorSets(
-				workspace.command_buffer,								  // command_buffer
-				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
-				lines_pipeline.layout,									  // pipline layout
-				0,														  // first set
-				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
-				0, nullptr												  // dynamics offsets count, ptr
-			);
-		}
-
-		// draw line vertice
-		vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
-	}
 	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
 	{ // upload object transforms:
 		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size() + pbr_instances.size()) * sizeof(ObjectsPipeline::Transform);
@@ -2203,8 +2177,40 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 			}
 		}
 
+			if (!lines_vertices.empty())
+	{ // draw with the lines pipeline;
+		vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
+
+		{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
+			std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
+			std::array<VkDeviceSize, 1> offsets{0};
+			vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+		}
+
+		{ // bind teh camera descript set:
+			std::array<VkDescriptorSet, 1> descriptor_sets{
+				workspace.Camera_descriptors, // 0. camera
+			};
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,								  // command_buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+				lines_pipeline.layout,									  // pipline layout
+				0,														  // first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
+				0, nullptr												  // dynamics offsets count, ptr
+			);
+		}
+
+		// draw line vertice
+		vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
+	}
+
 		vkCmdEndRenderPass(workspace.command_buffer);
 	}
+
+	
+
+
 
 	// end recoding
 	VK(vkEndCommandBuffer(workspace.command_buffer));

@@ -297,6 +297,11 @@ struct Render : RTG::Application
 	VkImageView World_irradiance_storage_view = VK_NULL_HANDLE;
 	VkSampler World_irradiance_sampler = VK_NULL_HANDLE;
 
+	Helpers::AllocatedImage World_prefilter;
+	VkImageView World_prefilter_view = VK_NULL_HANDLE;
+	VkSampler World_prefilter_sampler = VK_NULL_HANDLE;
+	std::vector<VkImageView> World_prefilter_storage_views;
+
 	std::vector<Helpers::AllocatedImage> textures;
 	std::vector<VkImageView> texture_views;
 	VkSampler texture_sampler = VK_NULL_HANDLE;

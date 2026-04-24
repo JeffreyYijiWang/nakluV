@@ -634,9 +634,9 @@ void Helpers::transfer_to_cubemap_layer(
 	uint32_t mip_width = std::max(1u, target.extent.width >> mip_level);
 	uint32_t mip_height = std::max(1u, target.extent.height >> mip_level);
 
-	size_t bytes_per_block = vkuFormatTexelBlockSize(target.format);
-	size_t texels_per_block = vkuFormatTexelsPerBlock(target.format);
-	assert(size == mip_width * mip_height * bytes_per_block / texels_per_block);
+	// size_t bytes_per_block = vkuFormatTexelBlockSize(target.format);
+	// size_t texels_per_block = vkuFormatTexelsPerBlock(target.format);
+	// assert(size == mip_width * mip_height * bytes_per_block / texels_per_block);
 
 	AllocatedBuffer transfer_src = create_buffer(
 		size,

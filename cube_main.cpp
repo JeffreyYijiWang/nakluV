@@ -24,14 +24,14 @@ struct Half4
 	uint16_t x, y, z, w;
 };
 
-static Half4 pack_half4(glm::vec4 const &v)
-{
-	return Half4{
-		glm::packHalf1x16(v.x),
-		glm::packHalf1x16(v.y),
-		glm::packHalf1x16(v.z),
-		glm::packHalf1x16(v.w)};
-}
+// static Half4 pack_half4(glm::vec4 const &v)
+// {
+// 	return Half4{
+// 		glm::packHalf1x16(v.x),
+// 		glm::packHalf1x16(v.y),
+// 		glm::packHalf1x16(v.z),
+// 		glm::packHalf1x16(v.w)};
+// }
 
 static glm::vec4 unpack_half4(Half4 const &h)
 {
@@ -113,7 +113,6 @@ VkImageView make_sampled_array_view(RTG &rtg, Helpers::AllocatedImage const &ima
 	return view;
 }
 
-
 static VkImageView make_storage_view_for_mip(RTG &rtg, Helpers::AllocatedImage const &image, uint32_t mip)
 {
 	VkImageView view = VK_NULL_HANDLE;
@@ -145,8 +144,14 @@ static VkSampler make_cube_sampler(RTG &rtg, uint32_t mip_count)
 		.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 		.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 		.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+		.anisotropyEnable = VK_FALSE,
+		.maxAnisotropy = 1.0f,
+		.compareEnable = VK_FALSE,
+		.compareOp = VK_COMPARE_OP_ALWAYS,
 		.minLod = 0.0f,
 		.maxLod = float(mip_count - 1),
+		.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+		.unnormalizedCoordinates = VK_FALSE,
 	};
 	VK(vkCreateSampler(rtg.device, &ci, nullptr, &sampler));
 	return sampler;
@@ -162,6 +167,18 @@ static glm::vec3 rgbe_to_linear(uint8_t r, uint8_t g, uint8_t b, uint8_t e)
 	if (e == 0)
 		return glm::vec3(0.0f);
 	float scale = std::ldexp(1.0f, int(e) - (128 + 8));
+
+	glm::vec3 c(
+		float(r) * scale,
+		float(g) * scale,
+		float(b) * scale);
+
+	for (int k = 0; k < 3; ++k)
+	{
+		if (!std::isfinite(c[k]))
+			c[k] = 0.0f;
+		c[k] = std::max(c[k], 0.0f);
+	}
 	return glm::vec3(float(r) * scale, float(g) * scale, float(b) * scale);
 }
 
@@ -298,8 +315,6 @@ static VkDescriptorSet make_ibl_descriptor(
 		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 	};
 
-	
-
 	VkDescriptorImageInfo out_info{
 		.sampler = VK_NULL_HANDLE,
 		.imageView = out_storage_view,
@@ -328,6 +343,7 @@ static VkDescriptorSet make_ibl_descriptor(
 	vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
 	return set;
 }
+
 
 static void generate_cubemap_mips(
 	RTG &rtg,
@@ -770,7 +786,7 @@ int main(int argc, char **argv)
 		GPUCubeMap env_gpu;
 		env_gpu.image = rtg.helpers.create_cubemap(
 			{in_size, in_size},
-			VK_FORMAT_R16G16B16A16_SFLOAT,
+			VK_FORMAT_R32G32B32A32_SFLOAT,
 			VK_IMAGE_TILING_OPTIMAL,
 			VK_IMAGE_USAGE_SAMPLED_BIT |
 				VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -781,20 +797,35 @@ int main(int argc, char **argv)
 
 		for (uint32_t face = 0; face < 6; ++face)
 		{
-			std::vector<Half4> face_rgba16(size_t(in_size) * size_t(in_size));
-			std::cout << "face " << face
-					  << " size = " << input_cube.faces[face].size()
-					  << ", expected = " << (in_size * in_size)
-					  << std::endl;
-			for (size_t i = 0; i < face_rgba16.size(); ++i)
+			std::vector<glm::vec4> face_rgba32(size_t(in_size) * size_t(in_size));
+
+			uint32_t bad_count = 0;
+
+			for (size_t i = 0; i < face_rgba32.size(); ++i)
 			{
 				glm::vec3 c = input_cube.faces[face][i];
-				face_rgba16[i] = pack_half4(glm::vec4(c, 1.0f));
+
+				for (int k = 0; k < 3; ++k)
+				{
+					if (!std::isfinite(c[k]))
+					{
+						c[k] = 0.0f;
+						bad_count++;
+					}
+
+					c[k] = std::max(c[k], 0.0f);
+				}
+
+				face_rgba32[i] = glm::vec4(c, 1.0f);
 			}
 
+			std::cout << "[env upload R32] face " << face
+					  << " bytes = " << face_rgba32.size() * sizeof(glm::vec4)
+					  << " bad = " << bad_count << std::endl;
+
 			rtg.helpers.transfer_to_cubemap_layer(
-				face_rgba16.data(),
-				face_rgba16.size() * sizeof(Half4),
+				face_rgba32.data(),
+				face_rgba32.size() * sizeof(glm::vec4),
 				env_gpu.image,
 				face,
 				0,
@@ -810,15 +841,15 @@ int main(int argc, char **argv)
 		bool do_ggx = !rtg.configuration.ggx_out_image.empty();
 
 		std::cout << "this is the size: " << in_size << std::endl;
-		uint32_t lambert_size = 16;
+		uint32_t lambert_size = 32;
 		uint32_t ggx_levels = 0;
 		uint32_t ggx_base_size = 0;
 
 		if (do_ggx)
 		{
-			uint32_t max_ggx_levels = uint32_t(std::floor(std::log2(float(in_size))));
+			ggx_base_size = std::max(1u, in_size);
+			uint32_t max_ggx_levels = 1u + uint32_t(std::floor(std::log2(float(ggx_base_size))));
 			ggx_levels = std::min<uint32_t>(rtg.configuration.ggx_levels, max_ggx_levels);
-			ggx_base_size = std::max(1u, in_size >> 1);
 		}
 
 		GPUCubeMap irradiance_gpu{};
@@ -974,7 +1005,7 @@ int main(int argc, char **argv)
 
 			CubePipeline::IrradiancePush ipush{
 				.size = lambert_size,
-				.numSamples = 4096 * 16,
+				.numSamples = 262144,
 			};
 
 			vkCmdPushConstants(
@@ -1000,7 +1031,9 @@ int main(int argc, char **argv)
 			for (uint32_t mip = 0; mip < ggx_levels; ++mip)
 			{
 				uint32_t mip_size = std::max(1u, ggx_base_size >> mip);
-				float roughness = float(mip + 1) / float(ggx_levels);
+				float roughness = (ggx_levels <= 1)
+									  ? 0.0f
+									  : float(mip) / float(ggx_levels - 1);
 
 				VkDescriptorSet spec_set = make_ibl_descriptor(
 					rtg,
@@ -1022,7 +1055,7 @@ int main(int argc, char **argv)
 
 				CubePipeline::SpecularPush spush{
 					.size = mip_size,
-					.numSamples = 4096 * 16,
+					.numSamples = 262144,
 					.roughness = roughness,
 					.pad = 0.0f,
 				};

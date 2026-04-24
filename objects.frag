@@ -19,9 +19,9 @@ layout(push_constant) uniform push{
 	float expose;
 	int toneMapMode;
 };
-layout(set=0, binding=1) uniform samplerCube IRRADIANCE_MAP;
+
 layout(set=0, binding=2) uniform samplerCube ENVIRONMENT;
-layout(set=0, binding=3) uniform sampler2D BRDF_LUT;
+
 
 layout(set=2, binding=0) uniform sampler2D NORMAL;
 layout(set=2, binding=1) uniform sampler2D DISPLACEMENT;
@@ -53,7 +53,7 @@ void main() {
 
 	vec3 irradiance = textureLod(ENVIRONMENT, worldNormal, ENVIRONMENT_MIPS).rgb;
 
-	vec3 hdr = albedo * irradiance / PI;
+	vec3 hdr = albedo * irradiance/ PI;
 
 	vec3 exposed = exposure(hdr, expose);
 
