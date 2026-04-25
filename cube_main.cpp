@@ -13,6 +13,7 @@
 #include "../Lib/stb/stb_image_write.h"
 #include "data_path.hpp"
 #include "../Lib/sejp.hpp"
+#include "timer.hpp"
 
 #include <iostream>
 #include <algorithm>
@@ -343,7 +344,6 @@ static VkDescriptorSet make_ibl_descriptor(
 	vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
 	return set;
 }
-
 
 static void generate_cubemap_mips(
 	RTG &rtg,
@@ -840,8 +840,7 @@ int main(int argc, char **argv)
 		bool do_lambert = !rtg.configuration.lambert_out_image.empty();
 		bool do_ggx = !rtg.configuration.ggx_out_image.empty();
 
-		std::cout << "this is the size: " << in_size << std::endl;
-		uint32_t lambert_size = 32;
+		uint32_t lambert_size = 64;
 		uint32_t ggx_levels = 0;
 		uint32_t ggx_base_size = 0;
 
@@ -980,120 +979,131 @@ int main(int argc, char **argv)
 		{
 			transition_output_to_general(ggx_gpu.image, ggx_levels);
 		}
-
-		// Lambertian dispatch:
-		if (do_lambert)
 		{
-			VkDescriptorSet irradiance_set = make_ibl_descriptor(
-				rtg,
-				descriptor_pool,
-				pipeline.set0_env,
-				env_gpu.sampler,
-				env_gpu.cube_view,
-				irradiance_gpu.storage_views[0]);
 
-			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.irradiance_pipeline);
-			vkCmdBindDescriptorSets(
-				cmd,
-				VK_PIPELINE_BIND_POINT_COMPUTE,
-				pipeline.irradiance_layout,
-				0,
-				1,
-				&irradiance_set,
-				0,
-				nullptr);
+			std::unique_ptr<Timer> timer;
+			timer.reset(new Timer([](double dt)
+								  { std::cout << "REPORT cube-compute-dispatch-" << dt * 1000.0 << "ms" << std::endl; }));
+			std::cout << "this is the size: " << in_size << std::endl;
 
-			CubePipeline::IrradiancePush ipush{
-				.size = lambert_size,
-				.numSamples = 200000,
-			};
-
-			vkCmdPushConstants(
-				cmd,
-				pipeline.irradiance_layout,
-				VK_SHADER_STAGE_COMPUTE_BIT,
-				0,
-				sizeof(ipush),
-				&ipush);
-
-			vkCmdDispatch(
-				cmd,
-				(lambert_size + 7) / 8,
-				(lambert_size + 7) / 8,
-				6);
-		}
-
-		// GGX dispatch:
-		if (do_ggx)
-		{
-			vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.specular_pipeline);
-
-			for (uint32_t mip = 0; mip < ggx_levels; ++mip)
+			// Lambertian dispatch:
+			if (do_lambert)
 			{
-				uint32_t mip_size = std::max(1u, ggx_base_size >> mip);
-				float roughness = (ggx_levels <= 1)
-									  ? 0.0f
-									  : float(mip) / float(ggx_levels - 1);
-
-				VkDescriptorSet spec_set = make_ibl_descriptor(
+				VkDescriptorSet irradiance_set = make_ibl_descriptor(
 					rtg,
 					descriptor_pool,
 					pipeline.set0_env,
 					env_gpu.sampler,
 					env_gpu.cube_view,
-					ggx_gpu.storage_views[mip]);
+					irradiance_gpu.storage_views[0]);
 
+				vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.irradiance_pipeline);
 				vkCmdBindDescriptorSets(
 					cmd,
 					VK_PIPELINE_BIND_POINT_COMPUTE,
-					pipeline.specular_layout,
+					pipeline.irradiance_layout,
 					0,
 					1,
-					&spec_set,
+					&irradiance_set,
 					0,
 					nullptr);
 
-				CubePipeline::SpecularPush spush{
-					.size = mip_size,
-					.numSamples = 190000,
-					.roughness = roughness,
-					.pad = 0.0f,
+				CubePipeline::IrradiancePush ipush{
+					.size = lambert_size,
+					.numSamples = 200000,
 				};
 
 				vkCmdPushConstants(
 					cmd,
-					pipeline.specular_layout,
+					pipeline.irradiance_layout,
 					VK_SHADER_STAGE_COMPUTE_BIT,
 					0,
-					sizeof(spush),
-					&spush);
+					sizeof(ipush),
+					&ipush);
 
 				vkCmdDispatch(
 					cmd,
-					(mip_size + 7) / 8,
-					(mip_size + 7) / 8,
+					(lambert_size + 7) / 8,
+					(lambert_size + 7) / 8,
 					6);
 			}
+
+			// GGX dispatch:
+			if (do_ggx)
+			{
+				vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.specular_pipeline);
+
+				for (uint32_t mip = 0; mip < ggx_levels; ++mip)
+				{
+					uint32_t mip_size = std::max(1u, ggx_base_size >> mip);
+					float roughness = (ggx_levels <= 1)
+										  ? 0.0f
+										  : float(mip) / float(ggx_levels - 1);
+
+					VkDescriptorSet spec_set = make_ibl_descriptor(
+						rtg,
+						descriptor_pool,
+						pipeline.set0_env,
+						env_gpu.sampler,
+						env_gpu.cube_view,
+						ggx_gpu.storage_views[mip]);
+
+					vkCmdBindDescriptorSets(
+						cmd,
+						VK_PIPELINE_BIND_POINT_COMPUTE,
+						pipeline.specular_layout,
+						0,
+						1,
+						&spec_set,
+						0,
+						nullptr);
+
+					CubePipeline::SpecularPush spush{
+						.size = mip_size,
+						.numSamples = 190000,
+						.roughness = roughness,
+						.pad = 0.0f,
+					};
+
+					vkCmdPushConstants(
+						cmd,
+						pipeline.specular_layout,
+						VK_SHADER_STAGE_COMPUTE_BIT,
+						0,
+						sizeof(spush),
+						&spush);
+
+					vkCmdDispatch(
+						cmd,
+						(mip_size + 7) / 8,
+						(mip_size + 7) / 8,
+						6);
+				}
+			}
+
+			VK(vkEndCommandBuffer(cube_command_buffer));
+
+			{
+				VkSubmitInfo submit_info{
+					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+					.commandBufferCount = 1,
+					.pCommandBuffers = &cube_command_buffer,
+				};
+
+				VK(vkQueueSubmit(rtg.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
+				VK(vkQueueWaitIdle(rtg.graphics_queue));
+			}
+
+			std::cout << "Computing: done." << std::endl;
 		}
-
-		VK(vkEndCommandBuffer(cube_command_buffer));
-
-		{
-			VkSubmitInfo submit_info{
-				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-				.commandBufferCount = 1,
-				.pCommandBuffers = &cube_command_buffer,
-			};
-
-			VK(vkQueueSubmit(rtg.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
-			VK(vkQueueWaitIdle(rtg.graphics_queue));
-		}
-
-		std::cout << "Computing: done." << std::endl;
 
 		// read back + save Lambertian:
 		if (do_lambert)
 		{
+			std::unique_ptr<Timer> timer;
+			timer.reset(new Timer([](double dt)
+								  { std::cout << "REPORT cube-lambert-readback-write " << dt * 1000.0 << "ms" << std::endl; }));
+
 			std::array<std::vector<glm::vec4>, 6> result_faces;
 			for (uint32_t face = 0; face < 6; ++face)
 			{
@@ -1110,6 +1120,10 @@ int main(int argc, char **argv)
 		// read back + save GGX:
 		if (do_ggx)
 		{
+			std::unique_ptr<Timer> timer;
+			timer.reset(new Timer([](double dt)
+								  { std::cout << "REPORT cube-ggx-readback-write " << dt * 1000.0 << "ms" << std::endl; }));
+
 			auto split_ext = [](std::string const &path)
 			{
 				size_t dot = path.find_last_of('.');

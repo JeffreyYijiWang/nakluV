@@ -1,0 +1,755 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>15-472-s26: A2 - Materials</title>
+    <style>
+        /* feel free to style your report in a fancier way! */
+
+        @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;700&Anonymous+Pro&display=swap');
+
+        html {
+            background: #505055;
+        }
+
+        body {
+            font-family: 'Quicksand', sans-serif;
+            color: #000;
+            background: #eeeee8;
+            font-size: 15px;
+            margin: 1em auto 50vh auto;
+            padding: 1em 2em 1em 2em;
+            max-width: 45em;
+            border-radius: 4px;
+            box-shadow: 0 0 10px #0008;
+        }
+
+        h1 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        h2 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        h3 {
+            font-size: 16px;
+            font-weight: 400;
+        }
+
+        h4 {
+            font-size: 14px;
+            font-weight: 400;
+        }
+
+        h1, h2, h3, h4 {
+            margin: 15px 0 0 -10px;
+        }
+
+        p {
+            margin: 5px 0 0 0;
+        }
+
+        figure {
+            margin: 10px -2em;
+            padding: 10px 2em;
+            width: 100%;
+            background: #e8e8e8;
+        }
+
+        figcaption {
+            font-size: 14px;
+            font-style: italic;
+        }
+
+        .subtitle {
+            display: block;
+            font-size: 16px;
+            font-weight: 400;
+        }
+
+        .placeholder {
+            color: #800;
+            font-style: italic;
+        }
+
+        kbd {
+            display: inline-block;
+            background: #ccc;
+            color: #444;
+            font-style: normal;
+            font-weight: 700;
+            border-radius: 8px;
+            padding: 1px 6px;
+            margin: 1px;
+            border: 1.5px solid #aaa;
+        }
+
+        code {
+            font-family: 'Anonymous Pro', monospace;
+            background: #222;
+            color: #fff;
+            border-radius: 4px;
+            padding: 2px 4px;
+            margin: 1px;
+        }
+
+            code var {
+                color: #ef5;
+                font-style: italic;
+            }
+
+        .atag {
+            font-family: 'Calistoga', serif;
+            font-size: 90%;
+            color: #000;
+            background: #e17dcd;
+            display: inline-block;
+            padding: 1px 4px;
+            border-radius: 4px;
+            line-height: 120%;
+        }
+
+            .atag:before {
+                content: '�';
+            }
+
+            .atag.extra {
+                background: #c6aff8;
+            }
+
+            .atag.creative {
+                background: linear-gradient(0.35turn, #fcacff, #f9ab93, #76a1e4, #20953d);
+            }
+    </style>
+    <!-- Load Chart.js for creating charts (documentation https://www.chartjs.org/docs/latest/ ) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>
+        A2: Materials
+        <span class="subtitle">by <span class="placeholder">Jeffrey Wang (jw8)</span></span>
+    </h1>
+
+    <!-- of course, delete these class="placeholder" notes in your report: -->
+
+    <p class="placeholder">
+        <p>
+    I structured my renderer by adding separate environment, mirror, and PBR pipelines, while keeping the original object
+     pipeline for Lambertian materials. My code now loads HDR RGBE lighting environments, creates Vulkan cubemap views, 
+     supports mirror/environment materials, applies exposure and selectable tone mapping, precomputes Lambertian irradiance,
+      and generates GGX-prefiltered cubemap levels through the cube utility. I also added texture descriptor support for normal, 
+      displacement, albedo, metallic, and roughness maps in the material pipelines. 
+      The only feature I did not fully finish is parallax occlusion mapping: displacement textures can be loaded and bound, 
+      but I have not yet completed the shader-side view-dependent UV displacement.
+</p>
+    </p>
+
+    <h2>My Model <span class="atag creative">A2-create</span></h2>
+
+    <p class="placeholder">
+      The model that I created was part of a scene of a rat based game that I was making. The scene has a mouse standing on a plate while trying
+      to steal bottles of wine. In order to not get caught it has the to take teh materials it touches and shape shifts into it. I modeled the table 
+      and mouse by taking a cube and then extruding aand beveling the edges. The mouse is multiple meshes that I then joined together.
+      I made textures by vertex painting the vertices and then usign simplybake to then bake the normals, displacenet, diffuse, roughness, and metalness into 
+      4k image textures that I can then be sampling from. 
+    </p>
+
+    <img src="animation/rat_render.png" alt="Rat scene render" style="width:100%;" />
+   
+    <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/rat_make_scene.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+
+    <h2>Using the Cube Utility</h2>
+
+  <p>
+    My cube utility takes a vertically stacked RGBE cubemap PNG as input and precomputes 
+    lighting lookup cubemaps for the viewer. The input is stored in RGBE format, which encodes 
+    high dynamic range radiance using a shared exponent per pixel. In the cube utility, this 
+    RGBE data is first decoded on the CPU into linear HDR radiance values.
+</p>
+
+<p>
+ In my implementation, I stoe the data into <code>VK_FORMAT_E5B9G9R9_UFLOAT_PACK32</code> or <code>VK_FORMAT_R16G16B16A16_SFLOA</code>
+</p>
+
+<p>
+    Once uploaded, the cubemap is used to generate precomputed lighting data. The utility computes 
+    a Lambertian irradiance map for diffuse lighting and GGX-prefiltered mip levels for specular 
+    reflections. The GGX output is written as a sequence of mip images, such as 
+    <code>output_ggx.1.png</code>, <code>output_ggx.2.png</code>, etc., which the viewer loads 
+    as environment mip levels.
+</p>
+
+<video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/lambertian_make.mp4" type="video/mp4" style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">/>
+
+    </video>
+    <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/ggx.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+
+<h3>Command-line Arguments (Cube Utility)</h3>
+
+<p>
+    The cube utility reads a vertically stacked RGBE cubemap PNG and writes precomputed cubemap data for environment lighting.
+</p>
+
+<ul>
+    <li><code>--debug</code>, <code>--no-debug</code> -- turn Vulkan debug and validation layers on or off.</li>
+    <li><code>--lambertian <var>out.png</var></code> -- compute a Lambertian irradiance cubemap and save it to <code><var>out.png</var></code>.</li>
+    <li><code>--ggx <var>out.png</var></code> -- compute GGX-prefiltered environment cubemap levels and save them as <code><var>out.1.png</var></code> through <code><var>out.N.png</var></code>.</li>
+    <li><code>--ggx-levels <var>N</var></code> -- choose the number of GGX mip levels to generate. By default, this is based on the input cubemap size.</li>
+</ul>
+
+<h3>Command-line Arguments (Viewer)</h3>
+
+<p>
+    The viewer loads an s72 scene and renders it with the material pipelines, environment lighting, exposure, and tone mapping options.
+</p>
+
+<ul>
+    <li><code>--debug</code>, <code>--no-debug</code> -- turn Vulkan debug and validation layers on or off.</li>
+    <li><code>--physical-device <var>name</var></code> -- run on the named physical device if available.</li>
+    <li><code>--drawing-size <var>w</var> <var>h</var></code> -- set the window drawing size.</li>
+    <li><code>--headless</code> -- run without creating a window and read events from stdin.</li>
+    <li><code>--scene <var>path</var></code> -- load a scene from a <code>.s72</code> file.</li>
+    <li><code>--camera <var>camera</var></code> -- render the scene from the named camera.</li>
+    <li><code>--culling <var>none|frustum|BVH</var></code> -- choose the scene culling mode.</li>
+    <li><code>--animation <var>loop|play-once|paused</var></code> -- control scene animation playback.</li>
+    <li><code>--exposure <var>E</var></code> -- scale radiance by <code>2^E</code> before tone mapping.</li>
+    <li><code>--tone-map <var>linear|ACES|gamma</var></code> -- choose the tone mapping curve.</li>
+</ul>
+
+    <h2>Evidence</h2>
+
+    <p class="placeholder">
+       There is evidence of the scene loader as I am able to load and render the scenes. 
+    </p>
+
+    <h3>Environment Loading and Display <span class="atag">A2-env</span></h3>
+
+    <p>
+    Environment maps are loaded in <code>Render::Render</code>. The scene file provides the environment source path, 
+    then the renderer loads the vertically stacked cubemap PNG using <code>stbi_load</code>.
+     Each texel is stored as RGBE8, so I convert each loaded <code>glm::u8vec4</code> RGBE pixel on the CPU using 
+     <code>rgbe_to_E5B9G9R9</code>. The converted data is uploaded into a Vulkan cubemap using <code>VK_FORMAT_E5B9G9R9_UFLOAT_PACK32</code>, 
+     which keeps HDR range while allowing hardware cubemap sampling and filtering.
+</p>
+
+<p>
+    The cubemap image is created with six array layers and then viewed 
+    with <code>VK_IMAGE_VIEW_TYPE_CUBE</code>. I bind this cubemap through 
+    the world descriptor set so that the environment, mirror, Lambertian, and PBR pipelines 
+    can sample it. The environment pipeline displays the cubemap directly as the background/environment material, 
+    while the mirror pipeline reflects the view direction and samples the same environment cubemap for mirror-like reflections.
+</p>
+
+<p>
+    I also create and read a separate irradiance cubemap for diffuse environment lighting.
+     After the HDR environment cubemap is uploaded, I allocate <code>World_irradiance</code> 
+     as a six-layer cubemap image using <code>VK_FORMAT_R16G16B16A16_SFLOAT</code>. I create both a 
+     cube view for sampling and a 2D-array storage view for compute shader writes. The Lambertian irradiance 
+     compute shader samples the original environment cubemap, integrates incoming light over the hemisphere,
+      and writes the low-frequency diffuse result into <code>World_irradiance</code>. During rendering, 
+      Lambertian materials sample this irradiance cubemap using the surface normal direction, instead of 
+      sampling the raw environment map directly.
+</p>
+  <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/env-cube.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+      <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/enviorment.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+
+   
+    <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+          <source src="animation/Correct_format.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+    <h3>Tone Mapping <span class="atag">A2-tone</span></h3>
+
+    <p class="placeholder">
+        <p>
+    For tone mapping, I implemented three modes: linear, ACES, and gamma. Linear mode only
+     applies exposure and leaves the color unchanged afterward. Gamma mode applies exposure 
+     first, then converts the linear color to display space using a 1/2.2 power curve. ACES mode uses 
+     an ACES-fitted filmic curve based on Stephen Hill's implementation, which compresses bright HDR 
+     values more smoothly than gamma and helps preserve highlight detail in environment-lit scenes.
+
+</p>
+    This plot compares my linear, gamma, and ACES tone mapping modes on increasing HDR input intensity.
+</p>
+
+<figure>
+    <canvas id="A2-tone-curve" style="display:block; width:100%; max-width:600px; margin:0 auto; background:#fff;"></canvas>
+    <figcaption>
+        Linear, gamma, and ACES tone mapping curves applied after exposure.
+    </figcaption>
+
+    <script>
+window.addEventListener('load', () => {
+    function RRTAndODTFit(v) {
+        const a = v * (v + 0.0245786) - 0.000090537;
+        const b = v * (0.983729 * v + 0.4329510) + 0.238081;
+        return a / b;
+    }
+
+    function ACESFittedScalar(x) {
+        // for grayscale input, the ACES matrices preserve gray,
+        // so this scalar fit is a good curve plot for the report
+        let y = RRTAndODTFit(x);
+        return Math.min(Math.max(y, 0.0), 1.0);
+    }
+
+    function gammaCorrection(x) {
+        return Math.pow(Math.min(Math.max(x, 0.0), 1.0), 1.0 / 2.2);
+    }
+
+    const intensity = [];
+    const linear = [];
+    const gamma = [];
+    const aces = [];
+
+    for (let i = 0; i <= 40; ++i) {
+        const x = i * 0.1; // 0.0 to 4.0 HDR input
+        intensity.push(x.toFixed(1));
+        linear.push(Math.min(x, 1.0));
+        gamma.push(gammaCorrection(x));
+        aces.push(ACESFittedScalar(x));
+    }
+
+    new Chart("A2-tone-curve", {
+        type: "line",
+        data: {
+            labels: intensity,
+            datasets: [
+                { label: "linear clamp", data: linear, backgroundColor:'#888', borderColor:'#888' },
+                { label: "gamma 1/2.2", data: gamma, backgroundColor:'#00f', borderColor:'#00f' },
+                { label: "ACES fitted", data: aces, backgroundColor:'#f00', borderColor:'#f00' },
+            ]
+        },
+        options: {
+            plugins: {
+                title: { display: true, text: "Tone Mapping Curves" },
+                legend: { display: true, onClick:()=>{} },
+            },
+            scales: {
+                y: {
+                    min: 0,
+                    max: 1,
+                    title: { display:true, text:"output intensity" },
+                },
+                x: {
+                    title: { display:true, text:"input radiance intensity" },
+                },
+            },
+            animation: false,
+        }
+    });
+});
+    </script>
+</figure>
+
+<figure>
+    <canvas id="A2-tone" style="display:block; width:100%; max-width:600px; margin:0 auto; background:#fff;"></canvas>
+    <figcaption>
+        Linear, gamma, and ACES tone mapping applied to <code>intensity * vec3(1.0, 0.5, 0.1)</code>.
+    </figcaption>
+
+    <script>
+window.addEventListener('load', () => {
+    function clamp01(x) {
+        return Math.min(Math.max(x, 0.0), 1.0);
+    }
+
+    function gammaCorrection(x) {
+        return Math.pow(clamp01(x), 1.0 / 2.2);
+    }
+
+    function RRTAndODTFit(v) {
+        const a = v * (v + 0.0245786) - 0.000090537;
+        const b = v * (0.983729 * v + 0.4329510) + 0.238081;
+        return a / b;
+    }
+
+    function mulMat3Vec3(m, v) {
+        return [
+            m[0][0] * v[0] + m[1][0] * v[1] + m[2][0] * v[2],
+            m[0][1] * v[0] + m[1][1] * v[1] + m[2][1] * v[2],
+            m[0][2] * v[0] + m[1][2] * v[1] + m[2][2] * v[2],
+        ];
+    }
+
+    function ACESFitted(color) {
+        const ACESInputMat = [
+            [0.59719, 0.35458, 0.04823],
+            [0.07600, 0.90834, 0.01566],
+            [0.02840, 0.13383, 0.83777],
+        ];
+
+        const ACESOutputMat = [
+            [1.60475, -0.53108, -0.07367],
+            [-0.10208, 1.10813, -0.00605],
+            [-0.00327, -0.07276, 1.07602],
+        ];
+
+        let c = mulMat3Vec3(ACESInputMat, color);
+        c = c.map(RRTAndODTFit);
+        c = mulMat3Vec3(ACESOutputMat, c);
+        return c.map(clamp01);
+    }
+
+    const intensity = [];
+
+    const linearR = [], linearG = [], linearB = [];
+    const gammaR = [], gammaG = [], gammaB = [];
+    const acesR = [], acesG = [], acesB = [];
+
+    for (let i = 0; i <= 40; ++i) {
+        const x = i * 0.1;
+        intensity.push(x.toFixed(1));
+
+        const color = [x * 1.0, x * 0.5, x * 0.1];
+
+        const linear = color.map(clamp01);
+        const gamma = color.map(gammaCorrection);
+        const aces = ACESFitted(color);
+
+        linearR.push(linear[0]);
+        linearG.push(linear[1]);
+        linearB.push(linear[2]);
+
+        gammaR.push(gamma[0]);
+        gammaG.push(gamma[1]);
+        gammaB.push(gamma[2]);
+
+        acesR.push(aces[0]);
+        acesG.push(aces[1]);
+        acesB.push(aces[2]);
+    }
+
+    new Chart("A2-tone", {
+        type: "line",
+        data: {
+            labels: intensity,
+            datasets: [
+                { label: "linear R", data: linearR, borderColor:'#f00', backgroundColor:'#f00', borderDash:[2,2] },
+                { label: "linear G", data: linearG, borderColor:'#0a0', backgroundColor:'#0a0', borderDash:[2,2] },
+                { label: "linear B", data: linearB, borderColor:'#00f', backgroundColor:'#00f', borderDash:[2,2] },
+
+                { label: "gamma R", data: gammaR, borderColor:'#f66', backgroundColor:'#f66' },
+                { label: "gamma G", data: gammaG, borderColor:'#6c6', backgroundColor:'#6c6' },
+                { label: "gamma B", data: gammaB, borderColor:'#66f', backgroundColor:'#66f' },
+
+                { label: "ACES R", data: acesR, borderColor:'#800', backgroundColor:'#800', borderDash:[8,4] },
+                { label: "ACES G", data: acesG, borderColor:'#080', backgroundColor:'#080', borderDash:[8,4] },
+                { label: "ACES B", data: acesB, borderColor:'#008', backgroundColor:'#008', borderDash:[8,4] },
+            ]
+        },
+        options: {
+            plugins: {
+                title: { display: true, text: "Tone Mapping RGB Channels" },
+                legend: { display: true, onClick:()=>{} },
+            },
+            scales: {
+                y: {
+                    min: 0,
+                    max: 1,
+                    title: { display:true, text:"output channel value" },
+                },
+                x: {
+                    title: { display:true, text:"input intensity multiplier" },
+                },
+            },
+            animation: false,
+        }
+    });
+});
+    </script>
+</figure>
+
+
+    <h3>Lambertian Diffuse <span class="atag">A2-diffuse</span></h3>
+
+    <p>
+    I implement the <code>"lambertian"</code> material in the original object pipeline, using <code>Render::ObjectsPipeline</code> and <code>objects.frag</code>. The renderer binds the world descriptor set, transform buffer, and material texture descriptor set, including the albedo, normal, and displacement textures. In the fragment shader, the material samples its albedo texture and computes a world-space surface normal. That normal is then used to sample the precomputed Lambertian irradiance cubemap, so the material receives diffuse environment lighting from the filtered lookup instead of directly sampling the raw environment map.
+</p>
+
+
+    <img src="animation/lam_energy.png" alt="Rat scene render" style="width:100%;" />
+    <img src="animation/lam_ox.png" alt="Rat scene render" style="width:100%;" />
+      
+    <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/lambertian_make.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+      
+    <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/enviornment.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+<figure>
+    <canvas id="A2-lambertian-timing" style="display:block; width:100%; max-width:700px; margin:0 auto; background:#fff;"></canvas>
+    <figcaption>
+        Lambertian irradiance cubemap compute and readback/write timings for a 1024×1024 input environment using 200,000 Monte Carlo samples (in seconds).
+    </figcaption>
+
+    <script>
+window.addEventListener('load', () => {
+    const sizes = [16, 32, 64, 128, 256, 512, 1024];
+
+    const computeSec = [
+        0.161615,
+        0.349278,
+        1.11566,
+        2.64122,
+        6.17121,
+        14.4875,
+        50.5658
+    ];
+
+    const readbackWriteSec = [
+        0.0040245,
+        0.0091411,
+        0.0326618,
+        0.036673,
+        0.0876878,
+        0.308843,
+        1.20892
+    ];
+
+    new Chart("A2-lambertian-timing", {
+        type: "line",
+        data: {
+            labels: sizes,
+            datasets: [
+                {
+                    label: "compute dispatch (s)",
+                    data: computeSec,
+                    borderColor: "#f00",
+                    backgroundColor: "#f00",
+                },
+                {
+                    label: "readback + write (s)",
+                    data: readbackWriteSec,
+                    borderColor: "#00f",
+                    backgroundColor: "#00f",
+                },
+            ]
+        },
+        options: {
+            plugins: {
+                title: {
+                    display: true,
+                    text: "Lambertian Irradiance Prefilter Timing (seconds), 200k Samples"
+                },
+                legend: {
+                    display: true,
+                    onClick:()=>{}
+                },
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: "Lambertian cubemap face size"
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: "time (seconds)"
+                    }
+                }
+            },
+            animation: false,
+        }
+    });
+});
+    </script>
+</figure>
+
+    <h3>Normal Mapping <span class="atag">A2-normal</span></h3>
+
+    <p>
+    Normal mapping is implemented by loading a normal texture for the material and binding it 
+    through the material texture descriptor set. In the fragment shader, the normal map is sampled in tangent space, 
+    remapped from texture range <code>[0,1]</code> into vector range <code>[-1,1]</code>, and transformed 
+    into world space using the tangent, bitangent, and normal basis from the mesh. This perturbed normal 
+    is then used for Lambertian and PBR lighting instead of the unmodified geometric normal.
+</p>
+
+<p>
+    The videos below compare the same material with and without normal mapping. 
+    With normal mapping enabled, the silhouette of the object stays the same, b
+    ut the lighting changes across the surface, showing that the normal texture is affecting 
+    the shading rather than changing the mesh geometry.
+</p>
+
+   <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/enviorment.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+
+       <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/no-normals.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+
+
+
+    <p class="placeholder">
+         The performance impact of normal mapping was small in my test scenes. It adds one extra texture sample and a tangent-space basis transform in the fragment shader, I did 
+         see a jump in time spent drawing a material like the mirror, but less due to the texture sampling. 
+</p>
+    </p>
+
+    <h3>Physically-Based Material <span class="atag">A2-pbr</span></h3>
+
+
+
+<p>
+    I implement the <code>"pbr"</code> material in <code>Render::PBRPipeline</code> and <code>pbr.frag</code>. 
+    The PBR pipeline binds the world/environment descriptor set, transform buffer, and material texture descriptor set.
+     The material texture set includes albedo, normal, displacement, metallic, and roughness textures. In the fragment shader, 
+     I sample these textures and evaluate a GGX microfacet BRDF using the surface normal, view direction, roughness,
+     and metallic parameters.
+</p>
+
+<p>
+    For enviromentmapping, my implementation follows the split-sum specular IBL approximation from Karis/Epic. 
+    Diffuse lighting samples the Lambertian irradiance cubemap.
+     Specular lighting samples a GGX-prefiltered environment cubemap using a roughness-dependent mip level, 
+     then combines that value with a preintegrated 2D environment BRDF lookup texture.
+</p>
+
+<p>
+    I implemented the prefiltering integrations with compute shader dispatches.
+     For Lambertian diffuse lighting, after the HDR environment cubemap is uploaded,
+      I bind the original environment cubemap as a sampled image and bind <code>World_irradiance</code> 
+      as a storage image. I then dispatch the Lambertian irradiance compute shader, w
+      hich integrates incoming environment radiance over the hemisphere and writes the filtered diffuse result into the irradiance cubemap.
+</p>
+
+<p>
+    For PBR specular lighting, I use the split-sum approximation.
+     The GGX-prefiltered cubemap is generated by the cube utility with a GGX compute shader.
+      It importance-samples the environment using the GGX distribution and writes 
+      progressively blurrier cubemap mip levels for increasing roughness.
+</p>
+
+<p>
+    The second part of the split sum, the environment BRDF lookup table, 
+    is generated at viewer startup. I allocate <code>World_environment_brdf_lut</code> 
+    as a floating-point 2D image, bind it as a storage image, and dispatch the BRDF
+     integration compute shader. After the compute pass finishes, I transition the image 
+     for shader sampling and bind it through the world descriptor set. During PBR shading,
+      the fragment shader samples <code>World_environment_brdf_lut</code> using <code>NdotV</code> and
+       roughness to combine the prefiltered environment color with the Fresnel/visibility term.
+</p>
+
+  <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+          <source src="animation/enviorment.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+      <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/ggx.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+    
+
+    <p class="placeholder">
+        The  cube utility is able to correctly pre-filter cube maps with the cosine-weighted GGX normal distribution function with little changes in energy
+    </p>
+
+         <img src="animation/ox_1.png" alt="Rat scene render" style="width:100%;" />
+      <img src="animation/myggx1.png" alt="Rat scene render" style="width:100%;" />
+<img src="animation/ox_1 difference.png" alt="Rat scene render" style="width:100%;" />
+           <img src="animation/ox_5.png" alt="Rat scene render" style="width:100%;" />
+      <img src="animation/my_ggx5.png" alt="Rat scene render" style="width:100%;" />
+
+
+    <p class="placeholder">
+        My cube utility is able to correctly pre-integrate the environment BRDF part of the split sum.
+    </p>
+
+     <img src="animation/karis_ibl_brdf_lut.png" alt="Rat scene render" style="width:100%;" />
+      <img src="animation/my-brdf.png" alt="Rat scene render" style="width:100%;" />
+
+
+   <p>
+    The chart above in teh lambertian section  shows the performance of my cube utility for Lambertian irradiance prefiltering. 
+    The input environment cubemap was 1024×1024, and each output texel used 200,000 Monte Carlo samples. 
+    As the output cubemap face size increases, the compute time grows quickly because the shader evaluates 
+    every texel on all six cubemap faces.The video below is coimputing for 5 mip levels. 
+</p>
+  <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/compute-ggx.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+
+ <video style="display:block; width:100%; max-width:720px; max-height:480px; object-fit:contain; margin:12px auto; background:#111;">
+
+
+          <source src="animation/comp-lam-ggx.mp4" type="video/mp4" style="width:100%;" />
+
+    </video>
+    
+
+    <h3>Displacement Mapping <span class="atag">A2x-displacement</span></h3>
+
+    <p class="placeholder">
+       I was able to bind, but never got use the Dispolacement Mapping, I can parse, and assign texture that I do not use in the fragment
+       shader of all objects(lam, pbr, mirror, or env). 
+    </p>
+
+   
+
+    <h2>Feedback</h2>
+    <p class="placeholder">
+      
+    </p>
+
+</body>
+</html>
