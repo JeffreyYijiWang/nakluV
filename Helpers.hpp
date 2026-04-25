@@ -76,7 +76,7 @@ struct Helpers
 	void transfer_to_image_cube(void *data, size_t size, AllocatedImage &target, uint8_t mip_level = 1);
 	void transfer_to_image_2d(void const *data, size_t size, AllocatedImage &target, VkImageLayout final_layout);
 	AllocatedImage create_cubemap(
-		VkExtent2D const& eextent,
+		VkExtent2D const &eextent,
 		VkFormat format,
 		VkImageTiling tiling,
 		VkImageUsageFlags usage,
@@ -111,6 +111,8 @@ struct Helpers
 	{
 		return create_shader_module(arr, 4 * N);
 	}
+
+	size_t align_buffer_size(size_t current_buffer_size, size_t alignment);
 
 	//-----------------------
 	// internals:
