@@ -41,6 +41,7 @@ const main_objs = [
 	maek.CPP('main.cpp'),
 	maek.CPP('scene.cpp'),
 	maek.CPP('frustum_culling.cpp'),
+		maek.CPP('ShadowAtlas.cpp'),
 	...common_objs,
 ];
 

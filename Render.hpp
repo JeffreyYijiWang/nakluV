@@ -89,7 +89,7 @@ struct Render : RTG::Application
 		struct World
 		{
 			glm::vec3 CAMERA_POSITION;
-			uint32_t ENVIRONMENT_MIPS;
+			float ENVIRONMENT_MIPS;
 			uint32_t SUN_LIGHT_COUNT;
 			uint32_t SPHERE_LIGHT_COUNT;
 			uint32_t SPOT_LIGHT_COUNT;
@@ -116,7 +116,8 @@ struct Render : RTG::Application
 
 		struct SpotLight
 		{
-			glm::vec4 POSITION; // w padding
+			glm::vec3 POSITION;
+			uint32_t shadow_size;
 			glm::vec3 DIRECTION;
 			float RADIUS;
 			glm::vec3 ENERGY;
@@ -214,14 +215,13 @@ struct Render : RTG::Application
 		// types for descriptors:
 		struct World
 		{
-			glm::vec3 CAMERA_POSITION; // xyz: camera position
-			uint32_t ENVIRONMENT_MIPS;
+			glm::vec3 POSITION;
+			uint32_t shadow_size;
+			float ENVIRONMENT_MIPS;
 			uint32_t SUN_LIGHT_COUNT;
 			uint32_t SPHERE_LIGHT_COUNT;
 			uint32_t SPOT_LIGHT_COUNT;
 		};
-
-		static_assert(sizeof(World) == 4 * 4, "World is the expected size.");
 
 		struct SunLight
 		{
@@ -233,7 +233,7 @@ struct Render : RTG::Application
 
 		struct SpotLight
 		{
-			glm::vec4 POSITION; // w padding
+			glm::vec4 POSITION;
 			glm::vec3 DIRECTION;
 			float RADIUS;
 			glm::vec3 ENERGY;
@@ -297,6 +297,8 @@ struct Render : RTG::Application
 		// location of ObjectPipeline::World data (stream to GPU fram e
 		Helpers::AllocatedBuffer World_src; // host coherenet ; mapped
 		Helpers::AllocatedBuffer World;		// device set locat
+		Helpers::AllocatedBuffer Light_src; // host coherent; mapped
+		Helpers::AllocatedBuffer Light;		// device-local
 		VkDescriptorSet World_descriptors;	// reference ot the world
 
 		// locat for ObjectsPipeline::Transforma data: (stream to GPU per frame).
@@ -340,6 +342,15 @@ struct Render : RTG::Application
 	VkSampler texture_sampler = VK_NULL_HANDLE;
 	VkDescriptorPool texture_descriptor_pool = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSet> texture_descriptors;
+
+	struct
+	{
+		size_t sun_light_size;
+		size_t sun_light_alignment;
+		size_t sphere_light_size;
+		size_t sphere_light_alignment;
+		size_t spot_light_size;
+	} light_info{};
 	//--------------------------------------------------------------------
 	// Resources that change when the swapchain is resized:
 
@@ -413,6 +424,30 @@ struct Render : RTG::Application
 	};
 	std::vector<ObjectInstance> lambertian_instances, environment_instances, mirror_instances, pbr_instances;
 
+	std::vector<ObjectsPipeline::SunLight> sun_lights;
+	std::vector<ObjectsPipeline::SphereLight> sphere_lights;
+	std::vector<ObjectsPipeline::SpotLight> spot_lights;
+
+	uint64_t total_shadow_size = 0;
+	static constexpr uint32_t shadow_atlas_length = 2048;
+
+	struct ShadowAtlas
+	{
+		uint32_t size;
+		struct Region
+		{
+			uint32_t x;
+			uint32_t y;
+			uint32_t size;
+		};
+		std::vector<Region> regions;
+
+		// spot lights must be sorted
+		void update_regions(std::vector<RTGRenderer::LambertianPipeline::SpotLight> &, uint8_t reduction);
+		void debug();
+
+		ShadowAtlas(uint32_t size_) : size(size_) {};
+	} shadow_atlas = ShadowAtlas(shadow_atlas_length);
 	//-------------------------------------
 	void set_animation_time(float t);
 

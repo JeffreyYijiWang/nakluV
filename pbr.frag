@@ -49,8 +49,6 @@ layout(location=2) in mat3 TBN;
 
 layout(location=0) out vec4 outColor;
 
-const float PI = 3.1415926538;
-
 //partly from https://learnopengl.com/PBR/IBL/Specular-IBL and https://learnopengl.com/code_viewer_gh.php?code=src/6.pbr/2.2.2.ibl_specular_textured/2.2.2.pbr.fs
 
 vec3 FresnelSchlickRoughness(float cosTheta, float roughness, vec3 F0)
@@ -262,6 +260,7 @@ void main() {
     vec3 worldNormal = normalize(TBN * tangentNormal);
 
 	vec3 viewDir = normalize(CAMERA_POSITION - position);
+	vec3 reflectDir = normalize(reflect(-viewDir,worldNormal));
 	    float NdotV = max(dot(worldNormal, viewDir), 0.0);
 	
 		float roughness = texture(ROUGHNESS, texCoord).r;
@@ -289,7 +288,7 @@ vec3 radiance = textureLod(
    vec3 diffuse = kD * albedo * irradiance/PI;
    vec3 light_energy = computeDirectLight(worldNormal, viewDir, reflectDir, albedo, roughness, F0, metalness);
 
-	vec3 hdr = diffuse + specular + light;
+	vec3 hdr = diffuse + specular + light_energy;
 
 	vec3 exposed = exposure(hdr, expose);
 

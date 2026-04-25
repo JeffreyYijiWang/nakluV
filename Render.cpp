@@ -924,7 +924,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 			world.SPOT_LIGHT_COUNT = scene.light_instance_count.spot_light;
 		}
 		{ // create Light buffers
-			size_t needed_bytes = sun_light_size + sphere_light_size + spot_light_size;
+			size_t needed_bytes = light_info.sphere_light_alignment + light_info.spot_light_size;
 			workspace.Light_src = rtg.helpers.create_buffer(
 				needed_bytes,
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -966,21 +966,11 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 			VkDescriptorBufferInfo SunLight_info{
 				.buffer = workspace.Light.handle,
 				.offset = 0,
-				.range = sun_light_size,
-			};
-			VkDescriptorBufferInfo SphereLight_info{
-				.buffer = workspace.Light.handle,
-				.offset = sun_light_size,
-				.range = sphere_light_size,
-			};
-			VkDescriptorBufferInfo SunLight_info{
-				.buffer = workspace.Light.handle,
-				.offset = 0,
 				.range = light_info.sun_light_size,
 			};
 			VkDescriptorBufferInfo SphereLight_info{
 				.buffer = workspace.Light.handle,
-				.offset = light_info.sun_light_alignment,
+				.offset = light_info.sun_light_size,
 				.range = light_info.sphere_light_size,
 			};
 			VkDescriptorBufferInfo SpotLight_info{
@@ -988,14 +978,23 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 				.offset = light_info.sphere_light_alignment,
 				.range = light_info.spot_light_size,
 			};
+			VkDescriptorImageInfo World_environment_info{
+				.sampler = World_environment_sampler,
+				.imageView = World_environment_view,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			};
 
-			VkDescriptorImageInfo World_environment_brdf_lut_info{
+			VkDescriptorImageInfo World_irradiance_info{
+				.sampler = World_irradiance_sampler,
+				.imageView = World_irradiance_view,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+			} VkDescriptorImageInfo World_environment_brdf_lut_info{
 				.sampler = texture_sampler,
 				.imageView = World_environment_brdf_lut_view,
 				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			};
 
-			std::array<VkWriteDescriptorSet, 5> writes{
+			std::array<VkWriteDescriptorSet, 8> writes{
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = workspace.Camera_descriptors,
@@ -1062,8 +1061,8 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-					.dstSet = work5pace.World_descriptors,
-					.dstBinding = 4,
+					.dstSet = workspace.World_descriptors,
+					.dstBinding = 5,
 					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -2025,7 +2024,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 
 		// device-side from Light_src to Light:
 
-		VkBufferCopy{
+		VkBufferCopy copy_region{
 			srcOffset = 0,
 			.dstOffset = 0,
 			.size = light_info.sphere_light_alignment + light_info.spot_light_size,
@@ -2499,7 +2498,17 @@ void Render::update(float dt)
 	// updating frustrum
 	lines_vertices.clear();
 	std::array<glm::vec3, 8> frustum_vertices;
-
+	std::array<glm::vec4, 8> clip_space_coordinates = {
+		glm::vec4(1.0f, 1.0f, 0.0f, 1.0f),	 // Near top right
+		glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f),	 // Near top left
+		glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),	 // Near bottom right
+		glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f), // Near bottom left
+		glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),	 // Far top right
+		glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),	 // Far top left
+		glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),	 // Far bottom right
+		glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)	 // Far bottom left
+	};
+	std::vector<std::array<glm::vec3, 8>> light_frustums;
 	if (rtg.configuration.culling_settings == 1)
 	{ // frustum culling is on
 		glm::mat4x4 world_from_clip = glm::inverse(culling_camera == CameraMode::Scene ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
@@ -2882,8 +2891,8 @@ void Render::update(float dt)
 					{
 
 						glm::vec3 light_direction = glm::mat3x3(WORLD_FROM_LOCAL) * glm::vec3(0.0f, 0.0f, 1.0f);
-						Scene::Light::ParamSun sun_param = std::get<Scene::Light::ParamSun>(cur_light.additional_params);
-						sun_lights.emplace_back(LambertianPipeline::SunLight{
+						Scene::Light::Sunlight sun_param = std::get<Scene::Light::Sunlight>(cur_light.additional_params);
+						sun_lights.emplace_back(ObjectsPipeline::SunLight{
 							.DIRECTION = glm::vec4(light_direction, 0.0f),
 							.ENERGY = sun_param.strength * tint,
 							.SIN_ANGLE = sin(sun_param.angle)});
@@ -2892,8 +2901,8 @@ void Render::update(float dt)
 					{
 
 						glm::vec3 light_position = WORLD_FROM_LOCAL * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-						Scene::Light::ParamSphere sphere_param = std::get<Scene::Light::ParamSphere>(cur_light.additional_params);
-						sphere_lights.emplace_back(LambertianPipeline::SphereLight{
+						Scene::Light::Spherelight sphere_param = std::get<Scene::Light::Spherelight>(cur_light.additional_params);
+						sphere_lights.emplace_back(ObjectsPipeline::SphereLight{
 							.POSITION = glm::vec4(light_position, 0.0f),
 							.RADIUS = sphere_param.radius,
 							.ENERGY = sphere_param.power * tint,
@@ -2905,279 +2914,299 @@ void Render::update(float dt)
 
 						glm::vec3 light_position = WORLD_FROM_LOCAL * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
 						glm::vec3 light_direction = glm::mat3x3(WORLD_FROM_LOCAL) * glm::vec3(0.0f, 0.0f, 1.0f);
-						Scene::Light::ParamSpot spot_param = std::get<Scene::Light::ParamSpot>(cur_light.additional_params);
+						Scene::Light::Spotlight spot_param = std::get<Scene::Light::Spotlight>(cur_light.additional_params);
 						float outer_angle = spot_param.fov / 2.0f;
 						float inner_angle = (1.0f - spot_param.blend) * outer_angle;
-						spot_lights.emplace_back(LambertianPipeline::SpotLight{
+						spot_lights.emplace_back(ObjectsPipeline::SpotLight{
 							.POSITION = glm::vec4(light_position, 0.0f),
+							.shadow_size = cur_light.shadow,
 							.DIRECTION = light_direction,
 							.RADIUS = spot_param.radius,
 							.ENERGY = spot_param.power * tint,
 							.LIMIT = spot_param.limit,
 							.CONE_ANGLES = glm::vec2(inner_angle, outer_angle),
 						});
+						total_shadow_size += cur_light.shadow * cur_light.shadow;
 					}
-
-					transform_stack.pop_back();
 				}
-
 				transform_stack.pop_back();
-			};
-			// traverse the scene hiearchy:
-			for (uint32_t j = 0; j < scene.root_nodes.size(); ++j)
-			{
-				transform_stack.clear();
-				draw_node(scene.root_nodes[j]);
 			}
+
+			transform_stack.pop_back();
+		};
+		// traverse the scene hiearchy:
+		for (uint32_t j = 0; j < scene.root_nodes.size(); ++j)
+		{
+			transform_stack.clear();
+			draw_node(scene.root_nodes[j]);
 		}
 	}
 
-	void Render::on_input(InputEvent const &evt)
-	{
-		// if there is a current saction, it get input priority:
-		if (action)
-		{
-			action(evt);
-			return;
-		}
+	{ // shadow map atlas organization
+		// sort spot light by the shadow size
+		std::sort(spot_lights.begin(), spot_lights.end(), [](LambertianPipeline::SpotLight a, LambertianPipeline::SpotLight b)
+				  { return a.shadow_size > b.shadow_size; });
 
-		// animation controls
-		// pausing
-		if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_P))
+		// reduce shadow map size if requesting too many
+		uint8_t reduction = 0;
+		while (total_shadow_size > shadow_atlas_length * shadow_atlas_length)
 		{
-			if (rtg.configuration.animation_settings != 2)
+			total_shadow_size /= 4;
+			++reduction;
+		}
+		shadow_atlas.update_regions(spot_lights, reduction);
+		shadow_atlas.debug();
+		// reset total_shadow_size
+		total_shadow_size = 0;
+	}
+}
+
+void Render::on_input(InputEvent const &evt)
+{
+	// if there is a current saction, it get input priority:
+	if (action)
+	{
+		action(evt);
+		return;
+	}
+
+	// animation controls
+	// pausing
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_P))
+	{
+		if (rtg.configuration.animation_settings != 2)
+		{
+			rtg.configuration.animation_settings = 2;
+		}
+		else
+		{
+			rtg.configuration.animation_settings = rtg.configuration.past_animation_settings;
+			std::cout << "return time:" << scene.return_time << std::endl;
+			set_animation_time(scene.return_time);
+		}
+		return;
+	}
+	// change to loop
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_L))
+	{
+		rtg.configuration.animation_settings = 1;
+		rtg.configuration.past_animation_settings = 1;
+		return;
+	}
+	// change to once
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_O))
+	{
+		rtg.configuration.animation_settings = 0;
+		rtg.configuration.past_animation_settings = 0;
+		return;
+	}
+	// restart
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_R))
+	{
+		set_animation_time(0.0f);
+		return;
+	}
+	// general controls:
+	if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_TAB || evt.key.key == GLFW_KEY_C))
+	{
+		// swithc camera mode
+		camera_mode = CameraMode((int(camera_mode) + 1) % 3);
+		if (scene.cameras.empty())
+		{
+			camera_mode = CameraMode((int(camera_mode) + 1) % 3);
+			std::cerr << "There are no scene camera in the scene, switching to user\n";
+		}
+		if (int(camera_mode) < 2)
+		{
+			culling_camera = camera_mode;
+		}
+		// update_free_camera(free_camera, camera_mode)
+		return;
+	}
+
+	// another switching camera mode via 1. Scene 2. User 3. Debug
+	if (evt.type == InputEvent::Type::KeyDown && (evt.key.key == GLFW_KEY_1 || evt.key.key == GLFW_KEY_2 || evt.key.key == GLFW_KEY_3))
+	{
+		if (evt.key.key == GLFW_KEY_1)
+		{
+			if (scene.cameras.empty())
 			{
-				rtg.configuration.animation_settings = 2;
+				std::cerr << "There are no scene camera in the scene, unable to switch\n";
 			}
 			else
 			{
-				rtg.configuration.animation_settings = rtg.configuration.past_animation_settings;
-				std::cout << "return time:" << scene.return_time << std::endl;
-				set_animation_time(scene.return_time);
+				camera_mode = CameraMode::Scene;
+				culling_camera = CameraMode::Scene;
+				std::cout << "scene MODE" << std::endl;
 			}
 			return;
 		}
-		// change to loop
-		if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_L))
+		else if (evt.key.key == GLFW_KEY_2)
 		{
-			rtg.configuration.animation_settings = 1;
-			rtg.configuration.past_animation_settings = 1;
-			return;
+			camera_mode = CameraMode::Free;
+			culling_camera = CameraMode::Free;
+			std::cout << "user MODE" << std::endl;
 		}
-		// change to once
-		if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_O))
+		else if (evt.key.key == GLFW_KEY_3)
 		{
-			rtg.configuration.animation_settings = 0;
-			rtg.configuration.past_animation_settings = 0;
-			return;
+			camera_mode = CameraMode::Debug;
+			std::cout << "DEBUG MODE" << std::endl;
 		}
-		// restart
-		if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_R))
-		{
-			set_animation_time(0.0f);
-			return;
-		}
-		// general controls:
-		if (evt.type == InputEvent::KeyDown && (evt.key.key == GLFW_KEY_TAB || evt.key.key == GLFW_KEY_C))
-		{
-			// swithc camera mode
-			camera_mode = CameraMode((int(camera_mode) + 1) % 3);
-			if (scene.cameras.empty())
-			{
-				camera_mode = CameraMode((int(camera_mode) + 1) % 3);
-				std::cerr << "There are no scene camera in the scene, switching to user\n";
-			}
-			if (int(camera_mode) < 2)
-			{
-				culling_camera = camera_mode;
-			}
-			// update_free_camera(free_camera, camera_mode)
-			return;
-		}
+		return;
+	}
 
-		// another switching camera mode via 1. Scene 2. User 3. Debug
-		if (evt.type == InputEvent::Type::KeyDown && (evt.key.key == GLFW_KEY_1 || evt.key.key == GLFW_KEY_2 || evt.key.key == GLFW_KEY_3))
+	if (camera_mode == CameraMode::Scene)
+	{
+		if (evt.type == InputEvent::Type::KeyDown && evt.key.key == GLFW_KEY_LEFT)
 		{
-			if (evt.key.key == GLFW_KEY_1)
+			if (scene.cameras.size() == 1)
 			{
-				if (scene.cameras.empty())
-				{
-					std::cerr << "There are no scene camera in the scene, unable to switch\n";
-				}
-				else
-				{
-					camera_mode = CameraMode::Scene;
-					culling_camera = CameraMode::Scene;
-					std::cout << "scene MODE" << std::endl;
-				}
+				std::cout << "Only one camera available, can't switch to another scene camera" << std::endl;
 				return;
 			}
-			else if (evt.key.key == GLFW_KEY_2)
+			scene.requested_camera_index = (scene.requested_camera_index - 1 + int32_t(scene.cameras.size())) % scene.cameras.size();
+			std::cout << "Viewing through scene camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
+		}
+		else if (evt.type == InputEvent::Type::KeyDown && evt.key.key == GLFW_KEY_RIGHT)
+		{
+			if (scene.cameras.size() == 1)
 			{
-				camera_mode = CameraMode::Free;
-				culling_camera = CameraMode::Free;
-				std::cout << "user MODE" << std::endl;
+				std::cout << "Only one camera available,  can't switch to another scene camera" << std::endl;
+				return;
 			}
-			else if (evt.key.key == GLFW_KEY_3)
-			{
-				camera_mode = CameraMode::Debug;
-				std::cout << "DEBUG MODE" << std::endl;
-			}
+			scene.requested_camera_index = (scene.requested_camera_index + 1) % scene.cameras.size();
+			std::cout << "Viewing through camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
+		}
+		return;
+	}
+
+	// free camera controls:
+	OrbitCamera &free_camera = (camera_mode == CameraMode::Free) ? user_camera : debug_camera;
+	if (camera_mode == CameraMode::Free || camera_mode == CameraMode::Debug)
+	{
+		if (evt.type == InputEvent::MouseWheel)
+		{
+			// change distance by 10% every scoll click :
+			free_camera.radius *= std::exp(std::log(1.1f) * -evt.wheel.y);
+
+			// make sure camera isn't too close or too far from target:
+			free_camera.radius = std::max(free_camera.radius, 0.5f * free_camera.near);
+			free_camera.radius = std::min(free_camera.radius, 2.0f * free_camera.far);
+			/*update_free_camera(free_camera, camera_mode);*/
 			return;
 		}
 
-		if (camera_mode == CameraMode::Scene)
+		if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT && (evt.button.mods & GLFW_MOD_SHIFT))
 		{
-			if (evt.type == InputEvent::Type::KeyDown && evt.key.key == GLFW_KEY_LEFT)
+			// start panning
+
+			float init_x = evt.button.x;
+			float init_y = evt.button.y;
+			OrbitCamera init_camera = free_camera;
+
+			CameraMode mode = camera_mode;
+			action = [this, init_x, init_y, init_camera, &free_camera, &mode](InputEvent const &evt)
 			{
-				if (scene.cameras.size() == 1)
+				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT)
 				{
-					std::cout << "Only one camera available, can't switch to another scene camera" << std::endl;
+					// cancle uypon button lifted:
+					action = nullptr;
 					return;
 				}
-				scene.requested_camera_index = (scene.requested_camera_index - 1 + int32_t(scene.cameras.size())) % scene.cameras.size();
-				std::cout << "Viewing through scene camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
-			}
-			else if (evt.type == InputEvent::Type::KeyDown && evt.key.key == GLFW_KEY_RIGHT)
-			{
-				if (scene.cameras.size() == 1)
+				if (evt.type == InputEvent::MouseMotion)
 				{
-					std::cout << "Only one camera available,  can't switch to another scene camera" << std::endl;
+					// handle motion
+
+					// image height at plane of target pont:
+					float height = 2.0f * std::tan(free_camera.fov * 0.5f) * free_camera.radius;
+
+					// motion, therefore at target piont:
+					float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height * height;
+					float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height * height;
+					// negative belcoe glfw useing y-down coordinat system
+
+					// compute camera transform to extract right
+					mat4 camera_from_world = orbit(
+						init_camera.target_x, init_camera.target_y, init_camera.target_z,
+						init_camera.azimuth, init_camera.elevation, init_camera.radius);
+
+					// move the desiere ddistance
+					free_camera.target_x = init_camera.target_x - dx * camera_from_world[0] - dy * camera_from_world[1];
+					free_camera.target_y = init_camera.target_y - dx * camera_from_world[4] - dy * camera_from_world[5];
+					free_camera.target_z = init_camera.target_z - dx * camera_from_world[8] - dy * camera_from_world[9];
+					/*	update_free_camera(free_camera, camera_mode);*/
 					return;
 				}
-				scene.requested_camera_index = (scene.requested_camera_index + 1) % scene.cameras.size();
-				std::cout << "Viewing through camera: " + scene.cameras[scene.requested_camera_index].name << " with index " << scene.requested_camera_index << std::endl;
-			}
+			};
 			return;
 		}
-
-		// free camera controls:
-		OrbitCamera &free_camera = (camera_mode == CameraMode::Free) ? user_camera : debug_camera;
-		if (camera_mode == CameraMode::Free || camera_mode == CameraMode::Debug)
+		else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT)
 		{
-			if (evt.type == InputEvent::MouseWheel)
+			// start tumbling
+
+			float init_x = evt.button.x;
+			float init_y = evt.button.y;
+			OrbitCamera init_camera = free_camera;
+			CameraMode mode = camera_mode;
+			action = [this, init_x, init_y, init_camera, &free_camera, &mode](InputEvent const &evt)
 			{
-				// change distance by 10% every scoll click :
-				free_camera.radius *= std::exp(std::log(1.1f) * -evt.wheel.y);
-
-				// make sure camera isn't too close or too far from target:
-				free_camera.radius = std::max(free_camera.radius, 0.5f * free_camera.near);
-				free_camera.radius = std::min(free_camera.radius, 2.0f * free_camera.far);
-				/*update_free_camera(free_camera, camera_mode);*/
-				return;
-			}
-
-			if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT && (evt.button.mods & GLFW_MOD_SHIFT))
-			{
-				// start panning
-
-				float init_x = evt.button.x;
-				float init_y = evt.button.y;
-				OrbitCamera init_camera = free_camera;
-
-				CameraMode mode = camera_mode;
-				action = [this, init_x, init_y, init_camera, &free_camera, &mode](InputEvent const &evt)
+				if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT)
 				{
-					if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT)
-					{
-						// cancle uypon button lifted:
-						action = nullptr;
-						return;
-					}
-					if (evt.type == InputEvent::MouseMotion)
-					{
-						// handle motion
-
-						// image height at plane of target pont:
-						float height = 2.0f * std::tan(free_camera.fov * 0.5f) * free_camera.radius;
-
-						// motion, therefore at target piont:
-						float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height * height;
-						float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height * height;
-						// negative belcoe glfw useing y-down coordinat system
-
-						// compute camera transform to extract right
-						mat4 camera_from_world = orbit(
-							init_camera.target_x, init_camera.target_y, init_camera.target_z,
-							init_camera.azimuth, init_camera.elevation, init_camera.radius);
-
-						// move the desiere ddistance
-						free_camera.target_x = init_camera.target_x - dx * camera_from_world[0] - dy * camera_from_world[1];
-						free_camera.target_y = init_camera.target_y - dx * camera_from_world[4] - dy * camera_from_world[5];
-						free_camera.target_z = init_camera.target_z - dx * camera_from_world[8] - dy * camera_from_world[9];
-						/*	update_free_camera(free_camera, camera_mode);*/
-						return;
-					}
-				};
-				return;
-			}
-			else if (evt.type == InputEvent::MouseButtonDown && evt.button.button == GLFW_MOUSE_BUTTON_LEFT)
-			{
-				// start tumbling
-
-				float init_x = evt.button.x;
-				float init_y = evt.button.y;
-				OrbitCamera init_camera = free_camera;
-				CameraMode mode = camera_mode;
-				action = [this, init_x, init_y, init_camera, &free_camera, &mode](InputEvent const &evt)
+					action = nullptr;
+					return;
+				}
+				if (evt.type == InputEvent::MouseMotion)
 				{
-					if (evt.type == InputEvent::MouseButtonUp && evt.button.button == GLFW_MOUSE_BUTTON_LEFT)
-					{
-						action = nullptr;
-						return;
-					}
-					if (evt.type == InputEvent::MouseMotion)
-					{
-						// motion, normalized so 1.0 is window height:
-						float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height;
-						float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height; // note: negated because glfw uses y-down coordinate system
+					// motion, normalized so 1.0 is window height:
+					float dx = (evt.motion.x - init_x) / rtg.swapchain_extent.height;
+					float dy = -(evt.motion.y - init_y) / rtg.swapchain_extent.height; // note: negated because glfw uses y-down coordinate system
 
-						// rotate camera based on motion:
-						float speed = float(M_PI);															  // how much rotation happens at one full window height
-						float flip_x = (std::abs(init_camera.elevation) > 0.5f * float(M_PI) ? -1.0f : 1.0f); // switch azimuth rotation when camera is upside-down
-						free_camera.azimuth = init_camera.azimuth - dx * speed * flip_x;
-						free_camera.elevation = init_camera.elevation - dy * speed;
+					// rotate camera based on motion:
+					float speed = float(M_PI);															  // how much rotation happens at one full window height
+					float flip_x = (std::abs(init_camera.elevation) > 0.5f * float(M_PI) ? -1.0f : 1.0f); // switch azimuth rotation when camera is upside-down
+					free_camera.azimuth = init_camera.azimuth - dx * speed * flip_x;
+					free_camera.elevation = init_camera.elevation - dy * speed;
 
-						// reduce azimuth and elevation to [-pi,pi] range:
-						const float twopi = 2.0f * float(M_PI);
-						free_camera.azimuth -= std::round(free_camera.azimuth / twopi) * twopi;
-						free_camera.elevation -= std::round(free_camera.elevation / twopi) * twopi;
-						/*update_free_camera(free_camera, camera_mode);*/
-						return;
-					}
-				};
+					// reduce azimuth and elevation to [-pi,pi] range:
+					const float twopi = 2.0f * float(M_PI);
+					free_camera.azimuth -= std::round(free_camera.azimuth / twopi) * twopi;
+					free_camera.elevation -= std::round(free_camera.elevation / twopi) * twopi;
+					/*update_free_camera(free_camera, camera_mode);*/
+					return;
+				}
+			};
 
-				return;
-			}
+			return;
 		}
 	}
+}
 
-	void Render::set_animation_time(float t)
+void Render::set_animation_time(float t)
+{
+	scene.set_driver_time(t);
+}
+
+void Render::update_free_camera(OrbitCamera &cam, CameraMode type)
+{
+	assert(type != CameraMode::Scene);
+	float x = cam.radius * std::cos(cam.elevation) * std::cos(cam.azimuth);
+	float y = cam.radius * std::cos(cam.elevation) * std::sin(cam.azimuth);
+	float z = cam.radius * std::sin(cam.elevation);
+	float up = 1.0f;
+	// flip up axis when upside down
+	if (int((abs(cam.elevation) + float(M_PI) / 2) / float(M_PI)) % 2 == 1)
 	{
-		scene.set_driver_time(t);
+		up = -1.0f;
 	}
+	glm::vec3 eye = glm::vec3{x + cam.target_x, y + cam.target_y, z + cam.target_z};
+	uint8_t type_index = static_cast<uint8_t>(type);
+	view_from_world[type_index] = glm::make_mat4(look_at(
+													 eye.x, eye.y, eye.z,					   // eye
+													 cam.target_x, cam.target_y, cam.target_z, // target
+													 0.0f, 0.0f, up							   // up
+													 )
+													 .data());
 
-	void Render::update_free_camera(OrbitCamera & cam, CameraMode type)
-	{
-		assert(type != CameraMode::Scene);
-		float x = cam.radius * std::cos(cam.elevation) * std::cos(cam.azimuth);
-		float y = cam.radius * std::cos(cam.elevation) * std::sin(cam.azimuth);
-		float z = cam.radius * std::sin(cam.elevation);
-		float up = 1.0f;
-		// flip up axis when upside down
-		if (int((abs(cam.elevation) + float(M_PI) / 2) / float(M_PI)) % 2 == 1)
-		{
-			up = -1.0f;
-		}
-		glm::vec3 eye = glm::vec3{x + cam.target_x, y + cam.target_y, z + cam.target_z};
-		uint8_t type_index = static_cast<uint8_t>(type);
-		view_from_world[type_index] = glm::make_mat4(look_at(
-														 eye.x, eye.y, eye.z,					   // eye
-														 cam.target_x, cam.target_y, cam.target_z, // target
-														 0.0f, 0.0f, up							   // up
-														 )
-														 .data());
-
-		glm::mat4x4 clip = clip_from_view[type_index] * view_from_world[type_index];
-		CLIP_FROM_WORLD = to_mat4(clip);
-	}
+	glm::mat4x4 clip = clip_from_view[type_index] * view_from_world[type_index];
+	CLIP_FROM_WORLD = to_mat4(clip);
+}
