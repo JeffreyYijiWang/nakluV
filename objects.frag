@@ -4,14 +4,17 @@
 	#include "tonemap.glsl"
 #endif
 
+#ifndef LIGHT
+	#include "light_struc.glsl"
+#endif
+
 
 layout(set=0,binding=0,std140) uniform World {
-	vec3 SKY_DIRECTION;
-	vec3 SKY_ENERGY; //energy supplied by sky to a surface patch with normal = SKY_DIRECTION
-	vec3 SUN_DIRECTION;
-	vec3 SUN_ENERGY; //energy supplied by sun to a surface patch with normal = SUN_DIRECTION
 	vec3 CAMERA_POSITION;
-	float ENVIRONMENT_MIPS;
+	uint ENVIRONMENT_MIPS;
+	uint SUN_LIGHT_COUNT;
+	uint SPHERE_LIGHT_COUNT;
+	uint SPOT_LIGHT_COUNT;
 };
 
 layout(push_constant) uniform push{
@@ -21,6 +24,19 @@ layout(push_constant) uniform push{
 };
 
 layout(set=0, binding=2) uniform samplerCube ENVIRONMENT;
+
+layout(set=0, binding=4, std140) readonly buffer SunLights {
+	SunLight SUNLIGHTS[];
+};
+
+layout(set=0, binding=5, std140) readonly buffer SphereLights {
+	SphereLight SPHERELIGHTS[];
+};
+
+layout(set=0, binding=6, std140) readonly buffer SpotLights {
+	SpotLight SPOTLIGHTS[];
+};
+
 
 
 layout(set=2, binding=0) uniform sampler2D NORMAL;
@@ -35,9 +51,99 @@ layout(location=0) out vec4 outColor;
 
 #define PI 3.1415926538
 
-// //hemisphere lighting from direction l:
-// vec3 e = SKY_ENERGY * (0.5 * dot(worldNormal,SKY_DIRECTION) + 0.5)
-//        + SUN_ENERGY * max(0.0, dot(worldNormal,SUN_DIRECTION)) ;
+
+vec3 computeDirectLightDiffuse(vec3 worldNormal, vec3 albedo) {
+    vec3 light_energy = vec3(0.0);
+
+    // Sun Lights
+    for (uint i = 0; i < SUN_LIGHT_COUNT; ++i) {
+        SunLight light = SUNLIGHTS[i];
+        vec3 L = normalize(light.DIRECTION);
+        float NdotL = max(dot(worldNormal, L), -light.SIN_ANGLE);
+		float factor = (NdotL + light.SIN_ANGLE) / (light.SIN_ANGLE * 2.0f);
+		bool aboveHorizon = bool(floor(factor));
+        light_energy += (float(aboveHorizon) * NdotL + float(!aboveHorizon) * (factor * light.SIN_ANGLE)) * light.ENERGY * (albedo );
+    }
+
+    // Sphere Lights
+    for (uint i = 0; i < SPHERE_LIGHT_COUNT; ++i) {
+        SphereLight light = SPHERELIGHTS[i];
+        vec3 L = normalize(light.POSITION - position);
+        float d = length(light.POSITION - position);
+		
+		vec3 e = light.ENERGY / (4 * max(d, light.RADIUS) * max(d, light.RADIUS));
+        float attenuation = light.LIMIT == 0.0f ? 1.0f : max(0.0, 1.0 - pow(d / light.LIMIT, 4.0));
+
+		if (light.RADIUS == 0.0) {
+			float NdotL = max(dot(worldNormal, L), 0);
+			light_energy += albedo * e * (NdotL * attenuation / PI);
+		}
+		else if (light.RADIUS >= d) {
+			light_energy += albedo * e * (attenuation / PI);
+		}
+		else {
+			float sinHalfTheta = light.RADIUS / d;
+			float NdotL = max(dot(worldNormal, L), -sinHalfTheta);
+			float factor = (NdotL + sinHalfTheta) / (sinHalfTheta * 2.0f);
+			bool aboveHorizon = bool(floor(factor));
+			light_energy += (float(aboveHorizon) * NdotL + float(!aboveHorizon) * (factor * sinHalfTheta)) * (albedo * e * (attenuation / PI));
+		}
+
+    }
+	
+    // Spot Lights
+    for (uint i = 0; i < SPOT_LIGHT_COUNT; ++i) {
+        SpotLight light = SPOTLIGHTS[i];
+
+		float shadowTerm = 1.0f;
+		//calculate shadow
+		if (light.SHADOW_SIZE > 0) {
+			vec4 clipPosition = light.LIGHT_FROM_WORLD * vec4(position, 1.0);
+			if (!(clipPosition.x < - clipPosition.w || clipPosition.x > clipPosition.w || 
+				clipPosition.y < - clipPosition.w || clipPosition.y > clipPosition.w ||
+				clipPosition.z < - clipPosition.w || clipPosition.z > clipPosition.w)) {
+				vec4 lightSpacePositionHomogenous = light.ATLAS_COORD_FROM_WORLD * vec4(position, 1.0);
+				shadowTerm = textureProj(SHADOW_ATLAS, lightSpacePositionHomogenous);
+			}
+		}
+
+        vec3 L = normalize(light.POSITION - position);
+        float d = length(light.POSITION - position);
+
+		vec3 e = light.ENERGY / (4 * max(d, light.RADIUS) * max(d, light.RADIUS));
+        float attenuation = light.LIMIT == 0.0f ? 1.0f : max(0.0, 1.0 - pow(d / light.LIMIT, 4.0));
+
+		float angleToLight = acos(dot(L, light.DIRECTION));
+
+
+		float smoothFalloff = 1.0;
+		if (light.CONE_ANGLES.x == light.CONE_ANGLES.y) {
+			smoothFalloff = angleToLight <= light.CONE_ANGLES.y ? 1.0f : 0.0f;
+		}
+		else  {
+        	float angleToLightClamped = clamp(angleToLight, light.CONE_ANGLES.x, light.CONE_ANGLES.y);
+    		smoothFalloff = (angleToLightClamped - light.CONE_ANGLES.y) / (light.CONE_ANGLES.x - light.CONE_ANGLES.y);
+		}
+
+		if (light.RADIUS == 0.0) {
+			float NdotL = max(dot(worldNormal, L), 0);
+			light_energy += albedo * e * (shadowTerm * NdotL * attenuation * smoothFalloff / PI);
+		}
+		else if (light.RADIUS >= d) {
+			light_energy += albedo * e * (attenuation * smoothFalloff / PI);
+		}
+		else {
+			float sinHalfTheta = light.RADIUS / d;
+			float NdotL = max(dot(worldNormal, L), -sinHalfTheta);
+			float factor = (NdotL + sinHalfTheta) / (sinHalfTheta * 2.0f);
+			bool aboveHorizon = bool(floor(factor));
+			light_energy += (float(aboveHorizon) * NdotL + float(!aboveHorizon) * (factor * sinHalfTheta)) * (albedo * e * (shadowTerm * attenuation * smoothFalloff / PI));
+		}
+    }
+
+    return light_energy;
+
+}
 
 
 void main() {
@@ -53,7 +159,9 @@ void main() {
 
 	vec3 irradiance = textureLod(ENVIRONMENT, worldNormal, ENVIRONMENT_MIPS).rgb;
 
-	vec3 hdr = albedo * irradiance/ PI;
+	vec3 light_energy = computeDirectLightDiffuse(worldNormal, albedo);
+
+	vec3 hdr = albedo * irradiance/ PI + light_energy;
 
 	vec3 exposed = exposure(hdr, expose);
 

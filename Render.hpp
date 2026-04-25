@@ -88,26 +88,43 @@ struct Render : RTG::Application
 		// types for descriptors:
 		struct World
 		{
-			struct
-			{
-				float x, y, z, padding_;
-			} SKY_DIRECTION;
-			struct
-			{
-				float r, g, b, padding_;
-			} SKY_ENERGY;
-			struct
-			{
-				float x, y, z, padding_;
-			} SUN_DIRECTION;
-			struct
-			{
-				float r, g, b, padding_;
-			} SUN_ENERGY;
-			glm::vec4 CAMERA_POSITION_ENVIRONMENT_MIPS; // xyz: camera position, z: environment mips
+			glm::vec3 CAMERA_POSITION;
+			uint32_t ENVIRONMENT_MIPS;
+			uint32_t SUN_LIGHT_COUNT;
+			uint32_t SPHERE_LIGHT_COUNT;
+			uint32_t SPOT_LIGHT_COUNT;
 		};
 
-		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4, "World is the expected size.");
+		static_assert(sizeof(World) == 4 * 3 + 4 + 4 + 4 + 4, "World is the expected size.");
+
+		struct SunLight
+		{
+			glm::vec4 DIRECTION; // w padding
+			glm::vec3 ENERGY;
+			float SIN_ANGLE;
+		};
+		static_assert(sizeof(SunLight) == 4 * 4 + 4 * 3 + 4, "SunLight is the expected size.");
+
+		struct SphereLight
+		{
+			glm::vec3 POSITION;
+			float RADIUS;
+			glm::vec3 ENERGY;
+			float LIMIT;
+		};
+		static_assert(sizeof(SphereLight) == 4 * 3 + 4 + 4 * 3 + 4, "SphereLight is the expected size.");
+
+		struct SpotLight
+		{
+			glm::vec4 POSITION; // w padding
+			glm::vec3 DIRECTION;
+			float RADIUS;
+			glm::vec3 ENERGY;
+			float LIMIT;
+			glm::vec2 CONE_ANGLES;
+		};
+		static_assert(sizeof(SpotLight) == 4 * 4 + 4 * 3 + 4 + 4 * 3 + 4 + 4 * 2, "SpotLight is the expected size.");
+
 		struct Transform
 		{
 			mat4 CLIP_FROM_LOCAL;
@@ -197,26 +214,42 @@ struct Render : RTG::Application
 		// types for descriptors:
 		struct World
 		{
-			struct
-			{
-				float x, y, z, padding_;
-			} SKY_DIRECTION;
-			struct
-			{
-				float r, g, b, padding_;
-			} SKY_ENERGY;
-			struct
-			{
-				float x, y, z, padding_;
-			} SUN_DIRECTION;
-			struct
-			{
-				float r, g, b, padding_;
-			} SUN_ENERGY;
-			glm::vec4 CAMERA_POSITION_ENVIRONMENT_MIPS; // xyz: camera position, z: environment mips
+			glm::vec3 CAMERA_POSITION; // xyz: camera position
+			uint32_t ENVIRONMENT_MIPS;
+			uint32_t SUN_LIGHT_COUNT;
+			uint32_t SPHERE_LIGHT_COUNT;
+			uint32_t SPOT_LIGHT_COUNT;
 		};
 
-		static_assert(sizeof(World) == 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4 + 4 * 4, "World is the expected size.");
+		static_assert(sizeof(World) == 4 * 4, "World is the expected size.");
+
+		struct SunLight
+		{
+			glm::vec4 POSITION; // w padding
+			glm::vec3 ENERGY;
+			float SIN_ANGLE;
+		};
+		static_assert(sizeof(SunLight) == 4 * 4 + 4 * 3 + 4, "SunLight is the expected size.");
+
+		struct SpotLight
+		{
+			glm::vec4 POSITION; // w padding
+			glm::vec3 DIRECTION;
+			float RADIUS;
+			glm::vec3 ENERGY;
+			float LIMIT;
+			glm::vec2 CONE_ANGLES;
+		};
+		static_assert(sizeof(SpotLight) == 4 * 4 + 4 * 3 + 4 + 4 * 3 + 4 + 4 * 2, "SpotLight is the expected size.");
+
+		struct SphereLight
+		{
+			glm::vec3 POSITION;
+			float RADIUS;
+			glm::vec3 ENERGY;
+			float LIMIT;
+		};
+		static_assert(sizeof(SphereLight) == 4 * 3 + 4 + 4 * 3 + 4, "SphereLight is the expected size.");
 		struct Transform
 		{
 			mat4 CLIP_FROM_LOCAL;

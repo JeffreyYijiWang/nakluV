@@ -8,15 +8,14 @@
 #include <unordered_map>
 
 Scene::Scene(std::string filename, std::optional<std::string> camera, uint8_t animation_setting_)
-    :animation_setting(animation_setting_)
+    : animation_setting(animation_setting_)
 {
     load(data_path(filename), camera);
 }
 
-
-void Scene::load(std::string  filename, std::optional<std::string> requested_camera)
+void Scene::load(std::string filename, std::optional<std::string> requested_camera)
 {
-    //check file format
+    // check file format
     if (filename.substr(filename.size() - 4, 4) != ".s72")
     {
         throw std::runtime_error("Scene " + filename + " is not in thecompatible format (s72 required).");
@@ -27,8 +26,8 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
 
     try
     {
-        //parse .s72(array) into objects
-        std::vector<sejp::value> const& object = val.as_array().value();
+        // parse .s72(array) into objects
+        std::vector<sejp::value> const &object = val.as_array().value();
         if (object[0].as_string() != "s72-v2")
         {
             throw std::runtime_error("cannot find the correct header");
@@ -38,6 +37,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
         std::unordered_map<std::string, uint32_t> materials_map;
         std::unordered_map<std::string, uint32_t> textures_map;
         std::unordered_map<std::string, uint32_t> cameras_map;
+        std::unordered_map<std::string, uint32_t> lights_map;
 
         // insert the default 5 textures: 0 for albedo, 1 for roughness, 2 for metalness, 3 for normal, 4 for displacement
         textures.push_back(Texture(glm::vec3(1.0f, 1.0f, 1.0f)));
@@ -50,8 +50,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
         materials.push_back(Material{
             .name = "Default Material",
             .material_textures = Material::LambertianMaterial(),
-            });
-
+        });
 
         std::cout << "looked through header" << std::endl;
         for (int32_t i = 1; i < int32_t(object.size()); ++i)
@@ -82,10 +81,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                             }
                             else
                             {
-                                Node new_node = { .name = child_name };
+                                Node new_node = {.name = child_name};
                                 int32_t index = int32_t(nodes.size());
                                 nodes.push_back(new_node);
-                                nodes_map.insert({ child_name, index });
+                                nodes_map.insert({child_name, index});
                                 root_nodes.push_back(index);
                             }
                         }
@@ -103,10 +102,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 }
                 else
                 {
-                    Node new_node = { .name = node_name };
+                    Node new_node = {.name = node_name};
                     cur_node_index = int32_t(nodes.size());
                     nodes.push_back(new_node);
-                    nodes_map.insert({ node_name, cur_node_index });
+                    nodes_map.insert({node_name, cur_node_index});
                 }
                 // set position
                 if (auto translation = object_index.find("translation"); translation != object_index.end())
@@ -149,10 +148,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                         }
                         else
                         {
-                            Node new_node = { .name = child_name };
+                            Node new_node = {.name = child_name};
                             int32_t index = int32_t(nodes.size());
                             nodes.push_back(new_node);
-                            nodes_map.insert({ child_name, index });
+                            nodes_map.insert({child_name, index});
                             nodes[cur_node_index].children.push_back(index);
                         }
                     }
@@ -168,10 +167,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     }
                     else
                     {
-                        Mesh new_mesh = { .name = mesh_name };
+                        Mesh new_mesh = {.name = mesh_name};
                         int32_t index = int32_t(meshes.size());
                         meshes.push_back(new_mesh);
-                        meshes_map.insert({ mesh_name, index });
+                        meshes_map.insert({mesh_name, index});
                         nodes[cur_node_index].mesh_index = index;
                     }
                 }
@@ -186,10 +185,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     }
                     else
                     {
-                        Camera new_camera = { .name = camera_name };
+                        Camera new_camera = {.name = camera_name};
                         int32_t index = int32_t(cameras.size());
                         cameras.push_back(new_camera);
-                        cameras_map.insert({ camera_name, index });
+                        cameras_map.insert({camera_name, index});
                         nodes[cur_node_index].cameras_index = index;
                     }
                 }
@@ -198,26 +197,16 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 if (auto res = object_index.find("light"); res != object_index.end())
                 {
                     std::string light_name = res->second.as_string().value();
-                    int32_t light_index = -1;
-                    for (int32_t j = 0; j < lights.size(); ++j)
+                    if (auto light_found = lights_map.find(light_name); light_found != lights_map.end())
                     {
-                        if (lights[j].name == light_name)
-                        {
-                            light_index = j;
-                            break;
-                        }
-                    }
-                    //singular light
-                    if (light_index == -1)
-                    {
-                        Light new_light = { .name = light_name };
-                        int32_t index = int32_t(lights.size());
-                        lights.push_back(new_light);
-                        nodes[cur_node_index].light_index = index;
+                        nodes[cur_node_index].light_index = light_found->second;
                     }
                     else
                     {
-                        nodes[cur_node_index].light_index = light_index;
+                        Light new_light = {.name = light_name};
+                        int32_t index = int32_t(lights.size());
+                        lights.push_back(new_light);
+                        nodes[cur_node_index].light_index = index;
                     }
                 }
             }
@@ -232,10 +221,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 }
                 else
                 {
-                    Mesh new_mesh = { .name = mesh_name };
+                    Mesh new_mesh = {.name = mesh_name};
                     cur_mesh_index = uint32_t(meshes.size());
                     meshes.push_back(new_mesh);
-                    meshes_map.insert({ mesh_name, cur_mesh_index });
+                    meshes_map.insert({mesh_name, cur_mesh_index});
                 }
 
                 // Assuming all topology is triangle list
@@ -376,14 +365,15 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     }
                     else
                     {
-                        Material new_material = { .name = material_name };
+                        Material new_material = {.name = material_name};
                         int32_t index = int32_t(materials.size());
                         materials.push_back(new_material);
-                        materials_map.insert({ material_name, index });
+                        materials_map.insert({material_name, index});
                         meshes[cur_mesh_index].material_index = index;
                     }
                 }
-                else {
+                else
+                {
                     meshes[cur_mesh_index].material_index = 0;
                 }
             }
@@ -398,10 +388,10 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 }
                 else
                 {
-                    Camera new_camera = { .name = camera_name };
+                    Camera new_camera = {.name = camera_name};
                     cur_camera_index = int32_t(cameras.size());
                     cameras.push_back(new_camera);
-                    cameras_map.insert({ camera_name, cur_camera_index });
+                    cameras_map.insert({camera_name, cur_camera_index});
                 }
                 // get perspective
                 if (auto res = object_index.find("perspective"); res != object_index.end())
@@ -430,63 +420,75 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 }
                 else
                 {
-                    Material new_material = { .name = material_name };
+                    Material new_material = {.name = material_name};
                     cur_material_index = int32_t(materials.size());
                     materials.push_back(new_material);
-                    materials_map.insert({ material_name, cur_material_index });
+                    materials_map.insert({material_name, cur_material_index});
                 }
 
-                auto get_texture_format = [&](std::map<std::string, sejp::value> res) {
+                auto get_texture_format = [&](std::map<std::string, sejp::value> res)
+                {
                     Texture::Format format = Texture::Linear;
-                    if (auto format_res = res.find("format"); format_res != res.end()) {
+                    if (auto format_res = res.find("format"); format_res != res.end())
+                    {
                         std::string tex_format = format_res->second.as_string().value();
-                        if (tex_format == "srgb") {
+                        if (tex_format == "srgb")
+                        {
                             format = Texture::sRGB;
                         }
-                        else if (tex_format == "rgbe") {
+                        else if (tex_format == "rgbe")
+                        {
                             format = Texture::RGBE;
                         }
-                        else if (tex_format != "Linear") {
+                        else if (tex_format != "Linear")
+                        {
                             std::cerr << "Error: Unrecognized texture format for Material: " << materials[cur_material_index].name << ", defaulting to linear.\n";
                         }
                     }
                     return format;
-                    };
+                };
 
                 materials[cur_material_index].normal_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultNormal);
                 materials[cur_material_index].displacement_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultDisplacement);
-                //assign normal maps
-                if (auto res = object_index.find("normalMap"); res != object_index.end()) {
-                    if (auto source = res->second.as_object().value().find("src"); source != res->second.as_object().value().end()) {
+                // assign normal maps
+                if (auto res = object_index.find("normalMap"); res != object_index.end())
+                {
+                    if (auto source = res->second.as_object().value().find("src"); source != res->second.as_object().value().end())
+                    {
                         std::string tex_name = source->second.as_string().value();
-                        if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                        if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                        {
                             materials[cur_material_index].normal_index = tex_map_entry->second;
                         }
-                        else {
+                        else
+                        {
                             Texture new_texture = Texture(tex_name, get_texture_format(res->second.as_object().value()));
                             uint32_t index = uint32_t(textures.size());
                             textures.push_back(new_texture);
-                            textures_map.insert({ tex_name, index });
+                            textures_map.insert({tex_name, index});
                             materials[cur_material_index].normal_index = index;
                         }
                     }
                 }
-                //assign displacement maps
-                if (auto res = object_index.find("displacementMap"); res != object_index.end()) {
-                    if (auto source = res->second.as_object().value().find("src"); source != res->second.as_object().value().end()) {
+                // assign displacement maps
+                if (auto res = object_index.find("displacementMap"); res != object_index.end())
+                {
+                    if (auto source = res->second.as_object().value().find("src"); source != res->second.as_object().value().end())
+                    {
                         std::string tex_name = source->second.as_string().value();
-                        if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                        if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                        {
                             materials[cur_material_index].displacement_index = tex_map_entry->second;
                         }
-                        else {
+                        else
+                        {
                             Texture new_texture = Texture(tex_name, true, get_texture_format(res->second.as_object().value()));
                             uint32_t index = uint32_t(textures.size());
                             textures.push_back(new_texture);
-                            textures_map.insert({ tex_name, index });
+                            textures_map.insert({tex_name, index});
                             materials[cur_material_index].displacement_index = index;
                         }
                     }
-
                 }
 
                 // find lambertian
@@ -495,7 +497,8 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     MatLambertian_count++;
                     materials[cur_material_index].material_type = Material::Lambertian;
 
-                    if (auto albedo_res = res->second.as_object().value().find("albedo"); albedo_res != res->second.as_object().value().end()) {
+                    if (auto albedo_res = res->second.as_object().value().find("albedo"); albedo_res != res->second.as_object().value().end())
+                    {
                         auto albedo_vals = albedo_res->second.as_array();
                         if (albedo_vals) // albedo [0,0,0]
                         {
@@ -511,7 +514,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                                 Texture new_texture = Texture(glm::vec3(float(albedo_vector[0].as_number().value()), float(albedo_vector[1].as_number().value()), float(albedo_vector[2].as_number().value())));
                                 uint32_t index = uint32_t(textures.size());
                                 textures.push_back(new_texture);
-                                textures_map.insert({ tex_name, index });
+                                textures_map.insert({tex_name, index});
                                 materials[cur_material_index].material_textures = Material::LambertianMaterial(index);
                             }
                         }
@@ -530,25 +533,28 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                                     Texture new_texture = Texture(tex_name, get_texture_format(albedo_res->second.as_object().value()));
                                     uint32_t index = uint32_t(textures.size());
                                     textures.push_back(new_texture);
-                                    textures_map.insert({ tex_name, index });
+                                    textures_map.insert({tex_name, index});
                                     materials[cur_material_index].material_textures = Material::LambertianMaterial(index);
                                 }
                             }
                             else
-                            { //default lambertian material with nor source texture 
+                            { // default lambertian material with nor source texture
                                 materials[cur_material_index].material_textures = Material::LambertianMaterial(static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo));
                             }
                         }
                     }
-                    else { //no abeldo field 
+                    else
+                    { // no abeldo field
                         materials[cur_material_index].material_textures = Material::LambertianMaterial(static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo));
                     }
                 }
-                else if (auto mirror_res = object_index.find("mirror"); mirror_res != object_index.end()) {
+                else if (auto mirror_res = object_index.find("mirror"); mirror_res != object_index.end())
+                {
                     MatEnvMirror_count++;
                     materials[cur_material_index].material_type = Material::Mirror;
                 }
-                else if (auto env_res = object_index.find("environment"); env_res != object_index.end()) {
+                else if (auto env_res = object_index.find("environment"); env_res != object_index.end())
+                {
                     MatEnvMirror_count++;
                     materials[cur_material_index].material_type = Material::Environment;
                 }
@@ -558,138 +564,166 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     materials[cur_material_index].material_type = Material::PBR;
                     Material::PBRMaterial new_material = Material::PBRMaterial();
 
-                    //find albedo
-                    if (auto albedo_res = pbr_res->second.as_object().value().find("albedo"); albedo_res != pbr_res->second.as_object().value().end()) {
+                    // find albedo
+                    if (auto albedo_res = pbr_res->second.as_object().value().find("albedo"); albedo_res != pbr_res->second.as_object().value().end())
+                    {
                         auto albedo_vals = albedo_res->second.as_array();
                         // stored const value
-                        if (albedo_vals) {
+                        if (albedo_vals)
+                        {
                             std::vector<sejp::value> albedo_vector = albedo_vals.value();
                             assert(albedo_vector.size() == 3);
                             std::string tex_name = material_name;
-                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                            {
                                 new_material.albedo_index = tex_map_entry->second;
                             }
-                            else {
+                            else
+                            {
                                 Texture new_texture = Texture(glm::vec3(float(albedo_vector[0].as_number().value()), float(albedo_vector[1].as_number().value()), float(albedo_vector[2].as_number().value())));
                                 uint32_t index = uint32_t(textures.size());
                                 textures.push_back(new_texture);
-                                textures_map.insert({ tex_name, index });
+                                textures_map.insert({tex_name, index});
                                 new_material.albedo_index = index;
                             }
                         }
                         // stored texture
-                        else {
+                        else
+                        {
                             // check whether or not the albedo has a texture
-                            if (auto tex_res = albedo_res->second.as_object().value().find("src"); tex_res != albedo_res->second.as_object().value().end()) {
+                            if (auto tex_res = albedo_res->second.as_object().value().find("src"); tex_res != albedo_res->second.as_object().value().end())
+                            {
                                 std::string tex_name = tex_res->second.as_string().value();
-                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                                {
                                     new_material.albedo_index = tex_map_entry->second;
                                 }
-                                else {
+                                else
+                                {
                                     Texture new_texture = Texture(tex_name, get_texture_format(albedo_res->second.as_object().value()));
                                     uint32_t index = uint32_t(textures.size());
                                     textures.push_back(new_texture);
-                                    textures_map.insert({ tex_name, index });
+                                    textures_map.insert({tex_name, index});
                                     new_material.albedo_index = index;
                                 }
                             }
                             // somehow has no source texture
-                            else {
+                            else
+                            {
                                 new_material.albedo_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo);
                             }
                         }
                     }
-                    else {
+                    else
+                    {
                         new_material.albedo_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultAlbedo);
                     }
 
-                    //find roughness
-                    if (auto roughness_res = pbr_res->second.as_object().value().find("roughness"); roughness_res != pbr_res->second.as_object().value().end()) {
+                    // find roughness
+                    if (auto roughness_res = pbr_res->second.as_object().value().find("roughness"); roughness_res != pbr_res->second.as_object().value().end())
+                    {
                         auto roughness_val = roughness_res->second.as_number();
                         // stored const value
-                        if (roughness_val) {
+                        if (roughness_val)
+                        {
                             float roughness_value = float(roughness_val.value());
                             std::string tex_name = material_name + " roughness";
-                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                            {
                                 new_material.roughness_index = tex_map_entry->second;
                             }
-                            else {
+                            else
+                            {
                                 Texture new_texture = Texture(float(roughness_value));
                                 uint32_t index = uint32_t(textures.size());
                                 textures.push_back(new_texture);
-                                textures_map.insert({ tex_name, index });
+                                textures_map.insert({tex_name, index});
                                 new_material.roughness_index = index;
                             }
                         }
                         // stored texture
-                        else {
+                        else
+                        {
                             // check whether or not the roughness has a texture
-                            if (auto tex_res = roughness_res->second.as_object().value().find("src"); tex_res != roughness_res->second.as_object().value().end()) {
+                            if (auto tex_res = roughness_res->second.as_object().value().find("src"); tex_res != roughness_res->second.as_object().value().end())
+                            {
                                 std::string tex_name = tex_res->second.as_string().value();
-                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                                {
                                     new_material.roughness_index = tex_map_entry->second;
                                 }
-                                else {
+                                else
+                                {
                                     Texture new_texture = Texture(tex_name, true, get_texture_format(roughness_res->second.as_object().value()));
                                     uint32_t index = uint32_t(textures.size());
                                     textures.push_back(new_texture);
-                                    textures_map.insert({ tex_name, index });
+                                    textures_map.insert({tex_name, index});
                                     new_material.roughness_index = index;
                                 }
                             }
                             // somehow has no source texture
-                            else {
+                            else
+                            {
                                 new_material.roughness_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultRoughness);
                             }
                         }
                     }
-                    else {
+                    else
+                    {
                         new_material.roughness_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultRoughness);
                     }
 
-
-                    //find metal
-                    if (auto metal_res = pbr_res->second.as_object().value().find("metalness"); metal_res != pbr_res->second.as_object().value().end()) {
+                    // find metal
+                    if (auto metal_res = pbr_res->second.as_object().value().find("metalness"); metal_res != pbr_res->second.as_object().value().end())
+                    {
                         auto metal_val = metal_res->second.as_number();
                         // stored const value
-                        if (metal_val) {
+                        if (metal_val)
+                        {
                             auto metal_value = float(metal_val.value());
                             std::string tex_name = material_name + " metalness";
-                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                            if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                            {
                                 new_material.metalness_index = tex_map_entry->second;
                             }
-                            else {
+                            else
+                            {
                                 Texture new_texture = Texture(float(metal_value));
                                 uint32_t index = uint32_t(textures.size());
                                 textures.push_back(new_texture);
-                                textures_map.insert({ tex_name, index });
+                                textures_map.insert({tex_name, index});
                                 new_material.metalness_index = index;
                             }
                         }
                         // stored texture
-                        else {
+                        else
+                        {
                             // check whether or not the albedo has a texture
-                            if (auto tex_res = metal_res->second.as_object().value().find("src"); tex_res != metal_res->second.as_object().value().end()) {
+                            if (auto tex_res = metal_res->second.as_object().value().find("src"); tex_res != metal_res->second.as_object().value().end())
+                            {
                                 std::string tex_name = tex_res->second.as_string().value();
-                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end()) {
+                                if (auto tex_map_entry = textures_map.find(tex_name); tex_map_entry != textures_map.end())
+                                {
                                     new_material.metalness_index = tex_map_entry->second;
                                 }
-                                else {
+                                else
+                                {
                                     Texture new_texture = Texture(tex_name, true, get_texture_format(metal_res->second.as_object().value()));
                                     uint32_t index = uint32_t(textures.size());
                                     textures.push_back(new_texture);
-                                    textures_map.insert({ tex_name, index });
+                                    textures_map.insert({tex_name, index});
                                     new_material.metalness_index = index;
                                 }
                             }
                             // somehow has no source texture
-                            else {
+                            else
+                            {
                                 new_material.metalness_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultMetalness);
                             }
                         }
-
                     }
-                    else {
+                    else
+                    {
                         new_material.metalness_index = static_cast<uint32_t>(Texture::DefaultTexture::DefaultMetalness);
                     }
                     materials[cur_material_index].material_textures = new_material;
@@ -709,28 +743,50 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
             else if (type.value() == "LIGHT")
             {
                 std::string light_name = object_index.find("name")->second.as_string().value();
-               
-                glm::vec3 tint = glm::vec3(1.0f, 1.0f, 1.0f);
-                if (auto tint_res = object_index.find("tint"); tint_res != object_index.end())
+
+                uint32_t light_index = 0;
+                if (auto light_found = lights_map.find(light_name); light_found != lights_map.end())
                 {
-                    auto tint_arr = tint_res->second.as_array().value();
-                    assert(tint_arr.size() == 3);
-                    tint.x = float(tint_arr[0].as_number().value());
-                    tint.y = float(tint_arr[1].as_number().value());
-                    tint.z = float(tint_arr[2].as_number().value());
+                    light_index = light_found->second;
                 }
-                
-                float shadow = 0.0f;
+                else
+                {
+                    Light new_light = {.name = light_name};
+                    int32_t index = int32_t(lights.size());
+                    lights.push_back(new_light);
+                    lights_map.insert({light_name, index});
+                    light_index = index;
+                }
+
+                // tinitng
+                {
+                    glm::vec3 tint = glm::vec3(1.0f, 1.0f, 1.0f);
+                    if (auto tint_res = object_index.find("tint"); tint_res != object_index.end())
+                    {
+                        auto tint_arr = tint_res->second.as_array().value();
+                        assert(tint_arr.size() == 3);
+                        tint.x = float(tint_arr[0].as_number().value());
+                        tint.y = float(tint_arr[1].as_number().value());
+                        tint.z = float(tint_arr[2].as_number().value());
+                    }
+                    lights[light_index].tint = tint;
+                }
+
+                { // shadow
+                    float shadow = 0.0f;
                 if (auto shadow_res = object_index.find("shadow"); shadow_res != object_index.end())
                 {
                     shadow = float(shadow_res->second.as_number().value());
                 }
-                //For sun only - change when with multiple 
-                float angle = 0.0f;
-                float strength = 1.0f;
+                }
+
+
                 
+                // For sun
                 if (auto sun_res = object_index.find("sun"); sun_res != object_index.end())
                 {
+                    lights[light_index].light_type = Light::Sun;
+                    Light::Sunlight additional_params;
                     auto sun_obj = sun_res->second.as_object().value();
                     if (auto angle_res = sun_obj.find("angle"); angle_res != sun_obj.end())
                     {
@@ -740,34 +796,46 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     {
                         strength = float(strength_res->second.as_number().value());
                     }
+                    lights[light_index].additional_params = additional_params;
                 }
-                else
-                {
-                    std::cerr << "Only 'sun' light type supported for now.\n";
-                    continue;
-                }
-                //search through seen lights
-                int32_t light_index = -1;
-                for (int32_t j = 0; j < lights.size(); ++j)
-                {
-                    if (lights[j].name == light_name)
-                    {
-                        light_index = j;
-                        lights[j].tint = tint;
-                        lights[j].angle = angle;
-                        lights[j].strength = strength;
-                        break;
+                else if (auto sphere_res = object_i.find("sphere"); sphere_res != object_i.end()) {
+                    lights[light_index].light_type = Light::Sphere;
+                    Light::Spherelight additional_params;
+                    auto sphere_obj = sphere_res->second.as_object().value();
+                    if (auto radius_res = sphere_obj.find("radius"); radius_res != sphere_obj.end()) {
+                        additional_params.radius = float(radius_res->second.as_number().value());
                     }
+                    if (auto power_res = sphere_obj.find("power"); power_res != sphere_obj.end()) {
+                        additional_params.power = float(power_res->second.as_number().value());
+                    }
+                    if (auto limit_res = sphere_obj.find("limit"); limit_res != sphere_obj.end()) {
+                        additional_params.limit = float(limit_res->second.as_number().value());
+                    }
+                    lights[light_index].additional_params = additional_params;
                 }
-
-                if (light_index == -1)
-                {
-                    Light new_light = {
-                        .name = light_name,
-                        .tint = tint,
-                        .angle = angle,
-                        .strength = strength };
-                    lights.push_back(new_light);
+                else if (auto spot_res = object_i.find("spot"); spot_res != object_i.end()){
+                    lights[light_index].light_type = Light::Spot;
+                    Light::Spotlight additional_params;
+                    auto spot_obj = spot_res->second.as_object().value();
+                    if (auto radius_res = spot_obj.find("radius"); radius_res != spot_obj.end()) {
+                        additional_params.radius = float(radius_res->second.as_number().value());
+                    }
+                    if (auto power_res = spot_obj.find("power"); power_res != spot_obj.end()) {
+                        additional_params.power = float(power_res->second.as_number().value());
+                    }
+                    if (auto limit_res = spot_obj.find("limit"); limit_res != spot_obj.end()) {
+                        additional_params.limit = float(limit_res->second.as_number().value());
+                    }
+                    if (auto fov_res = spot_obj.find("fov"); fov_res != spot_obj.end()) {
+                        additional_params.fov = float(fov_res->second.as_number().value());
+                    }
+                    if (auto blend_res = spot_obj.find("blend"); blend_res != spot_obj.end()) {
+                        additional_params.blend = float(blend_res->second.as_number().value());
+                    }
+                    lights[light_index].additional_params = additional_params;
+                }
+                else {
+                    throw std::runtime_error("Unsupported light type, only supports Sun, Sphere, and Spot light.");
                 }
             }
             else if (type.value() == "DRIVER")
@@ -775,8 +843,8 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 std::string driver_name = object_index.find("name")->second.as_string().value();
                 std::string node_name = object_index.find("node")->second.as_string().value();
                 std::string channel_str = object_index.find("channel")->second.as_string().value();
-                
-                //parse channel
+
+                // parse channel
                 Driver::Channel channel;
                 if (channel_str == "translation")
                 {
@@ -794,8 +862,8 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 {
                     throw std::runtime_error("Unrecognized channel: " + channel_str);
                 }
-                
-                //parse interpolation
+
+                // parse interpolation
                 Driver::InterpolationMode interp = Driver::InterpolationMode::LINEAR;
                 if (auto interp_res = object_index.find("interpolation"); interp_res != object_index.end())
                 {
@@ -812,7 +880,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                     }
                 }
 
-                //search for node in seen in node_map
+                // search for node in seen in node_map
                 uint32_t node_index = 0;
                 if (auto node_found = nodes_map.find(node_name); node_found != nodes_map.end())
                 {
@@ -820,13 +888,12 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 }
                 else
                 {
-                    Node new_node = { .name = node_name };
+                    Node new_node = {.name = node_name};
                     node_index = int32_t(nodes.size());
                     nodes.push_back(new_node);
-                    nodes_map.insert({ node_name, node_index });
+                    nodes_map.insert({node_name, node_index});
                     root_nodes.push_back(node_index);
                 }
-
 
                 Driver driver = {
                     .name = driver_name,
@@ -845,7 +912,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                         throw std::runtime_error("Rotation driver " + driver_name + " does not have correct number of values (4 * time)");
                     }
                 }
-                else 
+                else
                 {
                     if (times.size() * 3 != values.size())
                     {
@@ -869,24 +936,33 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
             }
         }
     }
-    catch (std::exception& e)
+    catch (std::exception &e)
     {
         std::cerr << "Exception occured while trying to parse .s72 scene file\n";
         throw e;
     }
 
-    std::cout << "----Finished loading " + filename + "---------" << std::endl;
+    std::cout << "----Finished reading the stored values  " + filename + "---------" << std::endl;
 
     { // build the camera local to world transform vectors
-       std::vector<uint32_t> cur_transform_list;
-       std::function<void(uint32_t)> fill_camera_and_light_transforms = [&](uint32_t i) {
-            const Scene::Node& cur_node = nodes[i];
+        std::vector<uint32_t> cur_transform_list;
+        std::function<void(uint32_t)> fill_camera_and_light_transforms = [&](uint32_t i)
+        {
+            const Scene::Node &cur_node = nodes[i];
             cur_transform_list.push_back(i);
 
-            if (cur_node.light_index != -1) { // Light attached
-                lights[cur_node.light_index].local_to_world = cur_transform_list;
+            if (cur_node.light_index != -1) {
+                if (lights[cur_node.light_index].light_type == Light::Sun) {
+                    light_instance_count.sun_light++;
+                }
+                else if (lights[cur_node.light_index].light_type == Light::Sphere) {
+                    light_instance_count.sphere_light++;
+                }
+                else if (lights[cur_node.light_index].light_type == Light::Spot) {
+                    light_instance_count.spot_light++;
+                }
             }
-            if (cur_node.cameras_index != -1) //Camera attached
+            if (cur_node.cameras_index != -1) // Camera attached
             {
                 cameras[cur_node.cameras_index].local_to_world = cur_transform_list;
                 if (requested_camera.has_value() && requested_camera.value() == cameras[cur_node.cameras_index].name)
@@ -900,7 +976,7 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
                 fill_camera_and_light_transforms(child_index);
             }
             cur_transform_list.pop_back();
-       };
+        };
 
         // traverse the scene hiearchy:
         for (uint32_t k = 0; k < root_nodes.size(); ++k)
@@ -923,24 +999,24 @@ void Scene::load(std::string  filename, std::optional<std::string> requested_cam
 
 void Scene::debug()
 {
-    for (const auto& node : nodes)
+    for (const auto &node : nodes)
     {
         // Print node name
         std::cout << "Node Name: " << node.name << "\n";
         std::cout << "Node Transforms:" << std::endl;
         std::cout << "Node Position: ("
-            << node.transform.position.x << ", "
-            << node.transform.position.y << ", "
-            << node.transform.position.z << ")\n";
+                  << node.transform.position.x << ", "
+                  << node.transform.position.y << ", "
+                  << node.transform.position.z << ")\n";
         std::cout << "Node Rotation: ("
-            << node.transform.rotation.x << ", "
-            << node.transform.rotation.y << ", "
-            << node.transform.rotation.z << ", "
-            << node.transform.rotation.w << ")\n";
+                  << node.transform.rotation.x << ", "
+                  << node.transform.rotation.y << ", "
+                  << node.transform.rotation.z << ", "
+                  << node.transform.rotation.w << ")\n";
         std::cout << "Node Scale: ("
-            << node.transform.scale.x << ", "
-            << node.transform.scale.y << ", "
-            << node.transform.scale.z << ")\n";
+                  << node.transform.scale.x << ", "
+                  << node.transform.scale.y << ", "
+                  << node.transform.scale.z << ")\n";
 
         // Check if the node is a root
         bool is_root = (std::find(root_nodes.begin(), root_nodes.end(), &node - &nodes[0]) != root_nodes.end());
@@ -964,14 +1040,14 @@ void Scene::debug()
         // Print camera information (if available)
         if (node.cameras_index != -1)
         {
-            const Camera& camera = cameras[node.cameras_index];
+            const Camera &camera = cameras[node.cameras_index];
             std::cout << "Camera Name: " << camera.name << "\n";
         }
 
         // Print mesh information (if available)
         if (node.mesh_index != -1)
         {
-            const Mesh& mesh = meshes[node.mesh_index];
+            const Mesh &mesh = meshes[node.mesh_index];
             std::cout << "Mesh Name: " << mesh.name << ", Mesh Index: " << node.mesh_index << "\n";
             for (int i = 0; i < 4; ++i)
             {
@@ -991,54 +1067,61 @@ void Scene::debug()
             // Print material associated with the mesh
             if (mesh.material_index != -1)
             {
-                auto debug_texture = [&](const Texture& texture, std::string texture_name) {
-                    if (texture.has_src) {
+                auto debug_texture = [&](const Texture &texture, std::string texture_name)
+                {
+                    if (texture.has_src)
+                    {
                         std::cout << texture_name + " Source: " << std::get<std::string>(texture.value) << "\n";
                     }
-                    else {
-                        if (texture.single_channel) {
+                    else
+                    {
+                        if (texture.single_channel)
+                        {
                             float val = std::get<float>(texture.value);
                             std::cout << texture_name + " Value: "
-                                << val << "\n";
+                                      << val << "\n";
                         }
-                        else {
+                        else
+                        {
                             glm::vec3 val = std::get<glm::vec3>(texture.value);
                             std::cout << texture_name + " Color: ("
-                                << val.r << ", "
-                                << val.g << ", "
-                                << val.b << ")\n";
+                                      << val.r << ", "
+                                      << val.g << ", "
+                                      << val.b << ")\n";
                         }
                     }
-                   };
+                };
 
-
-                const Material& material = materials[mesh.material_index];
+                const Material &material = materials[mesh.material_index];
                 std::cout << "Material Name: " << material.name << "\n";
 
                 // Print texture associated with the material (if available)
-                const Texture& normal_texture = textures[material.normal_index];
+                const Texture &normal_texture = textures[material.normal_index];
                 debug_texture(normal_texture, "Normal");
-                const Texture& displacement_texture = textures[material.displacement_index];
+                const Texture &displacement_texture = textures[material.displacement_index];
                 debug_texture(displacement_texture, "Displacement");
 
-
                 // Print texture associated with the material
-                if (material.material_type == Material::MaterialType::Environment) {
+                if (material.material_type == Material::MaterialType::Environment)
+                {
                     std::cout << "  Environment Material" << std::endl;
                 }
-                else if (material.material_type == Material::MaterialType::Mirror) {
+                else if (material.material_type == Material::MaterialType::Mirror)
+                {
                     std::cout << "  Mirror Material" << std::endl;
                 }
-                else if (material.material_type == Material::MaterialType::Lambertian) {
-                    const Texture& texture = textures[std::get<Material::LambertianMaterial>(material.material_textures).albedo_index];
+                else if (material.material_type == Material::MaterialType::Lambertian)
+                {
+                    const Texture &texture = textures[std::get<Material::LambertianMaterial>(material.material_textures).albedo_index];
                     std::cout << "  Lambertian Material" << std::endl;
                     debug_texture(texture, "Albedo");
                 }
-                else {
+                else
+                {
                     std::cout << "  pbr Material" << std::endl;
-                    const Texture& albedo_texture = textures[std::get<Material::PBRMaterial>(material.material_textures).albedo_index];
-                    const Texture& roughness_texture = textures[std::get<Material::PBRMaterial>(material.material_textures).roughness_index];
-                    const Texture& metalness_texture = textures[std::get<Material::PBRMaterial>(material.material_textures).metalness_index];
+                    const Texture &albedo_texture = textures[std::get<Material::PBRMaterial>(material.material_textures).albedo_index];
+                    const Texture &roughness_texture = textures[std::get<Material::PBRMaterial>(material.material_textures).roughness_index];
+                    const Texture &metalness_texture = textures[std::get<Material::PBRMaterial>(material.material_textures).metalness_index];
                     debug_texture(albedo_texture, "Albedo");
                     debug_texture(roughness_texture, "Roughness");
                     debug_texture(metalness_texture, "Metalness");
@@ -1051,22 +1134,50 @@ void Scene::debug()
         }
 
         // Print light information (if available)
-        if (node.light_index != -1)
-        {
+         if (node.light_index != -1) {
             const Light& light = lights[node.light_index];
             std::cout << "Light Name: " << light.name << "\n";
-            std::cout << "Light Tint: ("
-                << light.tint.r << ", "
-                << light.tint.g << ", "
-                << light.tint.b << ")\n";
-            std::cout << "Light Strength: " << light.strength << "\n";
-            std::cout << "Light Angle: " << light.angle << "\n";
+            std::cout << "Light Tint: (" 
+                      << light.tint.r << ", "
+                      << light.tint.g << ", "
+                      << light.tint.b << ")\n";
+
+            std::cout << "Light Type: ";
+            switch (light.light_type) {
+                case Light::Sun:
+                    std::cout << "Sun\n";
+                    break;
+                case Light::Sphere:
+                    std::cout << "Sphere\n";
+                    break;
+                case Light::Spot:
+                    std::cout << "Spot\n";
+                    break;
+            }
+
+            std::visit([](const auto& params) {
+                using T = std::decay_t<decltype(params)>;
+                if constexpr (std::is_same_v<T, Light::Sunlight>) {
+                    std::cout << "Sun Angle: " << params.angle << "\n";
+                    std::cout << "Sun Strength: " << params.strength << "\n";
+                } else if constexpr (std::is_same_v<T, Light::Spherelight>) {
+                    std::cout << "Sphere Radius: " << params.radius << "\n";
+                    std::cout << "Sphere Power: " << params.power << "\n";
+                    std::cout << "Sphere Limit: " << params.limit << "\n";
+                } else if constexpr (std::is_same_v<T, Light::Spotlight>) {
+                    std::cout << "Spot Radius: " << params.radius << "\n";
+                    std::cout << "Spot Power: " << params.power << "\n";
+                    std::cout << "Spot Limit: " << params.limit << "\n";
+                    std::cout << "Spot FOV: " << params.fov << "\n";
+                    std::cout << "Spot Blend: " << params.blend << "\n";
+                }
+            }, light.additional_params);
         }
 
         std::cout << "-----------------------------\n";
     }
     // print driver info
-    for (const auto& driver : drivers)
+    for (const auto &driver : drivers)
     {
         std::cout << "Driver: " << driver.name << std::endl;
         std::cout << "  Node Index: " << driver.node_index << std::endl;
@@ -1117,79 +1228,85 @@ void Scene::debug()
     }
 }
 
-
 void Scene::update_drivers(float dt)
 {
-    if (animation_setting == 2) return;
-    for (Scene::Driver& driver : drivers) {
-        if (animation_setting == 2) {
+    if (animation_setting == 2)
+        return;
+    for (Scene::Driver &driver : drivers)
+    {
+        if (animation_setting == 2)
+        {
             std::cout << "driver time: " << driver.cur_time << std::endl;
             return_time = driver.cur_time;
             return;
         }
-        if (driver.cur_time_index == driver.times.size()) continue;
+        if (driver.cur_time_index == driver.times.size())
+            continue;
         driver.cur_time += dt;
         auto found_it = std::upper_bound(driver.times.begin() + driver.cur_time_index, driver.times.end(), driver.cur_time);
 
-        //extrapolate constant value at the beginning
-        if (found_it == driver.times.begin()) {
-            if (driver.channel == Driver::Channel::Rotation) {
+        // extrapolate constant value at the beginning
+        if (found_it == driver.times.begin())
+        {
+            if (driver.channel == Driver::Channel::Rotation)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 4;
                 nodes[driver.node_index].transform.rotation = glm::quat(
                     driver.values[cur_value_index + 3],
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
-            else if (driver.channel == Driver::Channel::Translation) {
+            else if (driver.channel == Driver::Channel::Translation)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 3;
                 nodes[driver.node_index].transform.position = glm::vec3(
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
-            else if (driver.channel == Driver::Channel::Scale) {
+            else if (driver.channel == Driver::Channel::Scale)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 3;
                 nodes[driver.node_index].transform.scale = glm::vec3(
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
             continue;
         }
         // extrapolate constant value at the end
-        if (found_it == driver.times.end()) {
+        if (found_it == driver.times.end())
+        {
             driver.cur_time_index = uint32_t(driver.times.size() - 1);
-            if (driver.channel == Driver::Channel::Rotation) {
+            if (driver.channel == Driver::Channel::Rotation)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 4;
                 nodes[driver.node_index].transform.rotation = glm::quat(
                     driver.values[cur_value_index + 3],
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
-            else if (driver.channel == Driver::Channel::Translation) {
+            else if (driver.channel == Driver::Channel::Translation)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 3;
                 nodes[driver.node_index].transform.position = glm::vec3(
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
-            else if (driver.channel == Driver::Channel::Scale) {
+            else if (driver.channel == Driver::Channel::Scale)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 3;
                 nodes[driver.node_index].transform.scale = glm::vec3(
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
             // reset animation to start again
-            if (animation_setting == 1) {
+            if (animation_setting == 1)
+            {
                 driver.cur_time_index = 0;
                 driver.cur_time = 0.0f;
             }
@@ -1197,83 +1314,94 @@ void Scene::update_drivers(float dt)
         }
         // time should be between cur_time_index and cur_time_index + 1
         driver.cur_time_index = uint32_t(found_it - driver.times.begin() - 1);
-        switch (driver.interpolation) {
-        case Driver::InterpolationMode::STEP: {
-            if (driver.channel == Driver::Channel::Rotation) {
+        switch (driver.interpolation)
+        {
+        case Driver::InterpolationMode::STEP:
+        {
+            if (driver.channel == Driver::Channel::Rotation)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 4;
                 nodes[driver.node_index].transform.rotation = glm::quat(
                     driver.values[cur_value_index + 3],
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
-            else if (driver.channel == Driver::Channel::Translation) {
+            else if (driver.channel == Driver::Channel::Translation)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 3;
                 nodes[driver.node_index].transform.position = glm::vec3(
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
-            else if (driver.channel == Driver::Channel::Scale) {
+            else if (driver.channel == Driver::Channel::Scale)
+            {
                 uint32_t cur_value_index = driver.cur_time_index * 3;
                 nodes[driver.node_index].transform.scale = glm::vec3(
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
             }
         }
-                                            break;
-        case Driver::InterpolationMode::LINEAR: {
+        break;
+        case Driver::InterpolationMode::LINEAR:
+        {
             float interval = driver.times[driver.cur_time_index + 1] - driver.times[driver.cur_time_index];
             float t = (driver.cur_time - driver.times[driver.cur_time_index]) / interval;
-            if (driver.channel == Driver::Channel::Rotation) {
+            if (driver.channel == Driver::Channel::Rotation)
+            {
                 uint32_t n = 4;
                 uint32_t cur_value_index = driver.cur_time_index * n;
                 nodes[driver.node_index].transform.rotation = glm::quat(
-                    driver.values[cur_value_index + 3],
-                    driver.values[cur_value_index],
-                    driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                ) * (1.0f - t) + glm::quat(
-                    driver.values[cur_value_index + n + 3],
-                    driver.values[cur_value_index + n],
-                    driver.values[cur_value_index + n + 1],
-                    driver.values[cur_value_index + n + 2]
-                ) * t;
+                                                                  driver.values[cur_value_index + 3],
+                                                                  driver.values[cur_value_index],
+                                                                  driver.values[cur_value_index + 1],
+                                                                  driver.values[cur_value_index + 2]) *
+                                                                  (1.0f - t) +
+                                                              glm::quat(
+                                                                  driver.values[cur_value_index + n + 3],
+                                                                  driver.values[cur_value_index + n],
+                                                                  driver.values[cur_value_index + n + 1],
+                                                                  driver.values[cur_value_index + n + 2]) *
+                                                                  t;
             }
-            else if (driver.channel == Driver::Channel::Translation) {
+            else if (driver.channel == Driver::Channel::Translation)
+            {
                 uint32_t n = 3;
                 uint32_t cur_value_index = driver.cur_time_index * n;
                 nodes[driver.node_index].transform.position = glm::vec3(
-                    driver.values[cur_value_index],
-                    driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                ) * (1.0f - t) + glm::vec3(
-                    driver.values[cur_value_index + n],
-                    driver.values[cur_value_index + n + 1],
-                    driver.values[cur_value_index + n + 2]
-                ) * t;
+                                                                  driver.values[cur_value_index],
+                                                                  driver.values[cur_value_index + 1],
+                                                                  driver.values[cur_value_index + 2]) *
+                                                                  (1.0f - t) +
+                                                              glm::vec3(
+                                                                  driver.values[cur_value_index + n],
+                                                                  driver.values[cur_value_index + n + 1],
+                                                                  driver.values[cur_value_index + n + 2]) *
+                                                                  t;
             }
-            else if (driver.channel == Driver::Channel::Scale) {
+            else if (driver.channel == Driver::Channel::Scale)
+            {
                 uint32_t n = 3;
                 uint32_t cur_value_index = driver.cur_time_index * n;
                 nodes[driver.node_index].transform.scale = glm::vec3(
-                    driver.values[cur_value_index],
-                    driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                ) * (1.0f - t) + glm::vec3(
-                    driver.values[cur_value_index + n],
-                    driver.values[cur_value_index + n + 1],
-                    driver.values[cur_value_index + n + 2]
-                ) * t;
+                                                               driver.values[cur_value_index],
+                                                               driver.values[cur_value_index + 1],
+                                                               driver.values[cur_value_index + 2]) *
+                                                               (1.0f - t) +
+                                                           glm::vec3(
+                                                               driver.values[cur_value_index + n],
+                                                               driver.values[cur_value_index + n + 1],
+                                                               driver.values[cur_value_index + n + 2]) *
+                                                               t;
             }
         }
-                                              break;
-        case Driver::InterpolationMode::SLERP: {
-            if (driver.channel == Driver::Channel::Rotation) {
+        break;
+        case Driver::InterpolationMode::SLERP:
+        {
+            if (driver.channel == Driver::Channel::Rotation)
+            {
                 float interval_slerp = driver.times[driver.cur_time_index + 1] - driver.times[driver.cur_time_index];
                 float t_slerp = (driver.cur_time - driver.times[driver.cur_time_index]) / interval_slerp;
 
@@ -1285,52 +1413,50 @@ void Scene::update_drivers(float dt)
                     driver.values[cur_value_index + 3],
                     driver.values[cur_value_index],
                     driver.values[cur_value_index + 1],
-                    driver.values[cur_value_index + 2]
-                );
+                    driver.values[cur_value_index + 2]);
 
                 glm::quat q2 = glm::quat(
                     driver.values[cur_value_index + n + 3],
                     driver.values[cur_value_index + n],
                     driver.values[cur_value_index + n + 1],
-                    driver.values[cur_value_index + n + 2]
-                );
+                    driver.values[cur_value_index + n + 2]);
 
                 // Perform SLERP between q1 and q2 based on t
                 nodes[driver.node_index].transform.rotation = glm::slerp(q1, q2, t_slerp);
             }
-            else if (driver.channel == Driver::Channel::Translation) {
+            else if (driver.channel == Driver::Channel::Translation)
+            {
                 throw std::runtime_error("Shouldn't call SLERP on translation");
             }
-            else {
+            else
+            {
                 throw std::runtime_error("Shouldn't call SLERP on scale");
             }
         }
-            break;
+        break;
         }
-
     }
 }
 
 void Scene::set_driver_time(float t)
 {
-    for (Scene::Driver& driver : drivers) {
+    for (Scene::Driver &driver : drivers)
+    {
         driver.cur_time_index = 0;
         driver.cur_time = t;
     }
     update_drivers(0.0f);
 }
 
-
 glm::mat4x4 Scene::Transform::local_to_parent() const
 {
     glm::mat3 rot = glm::mat3_cast(rotation);
 
     return glm::mat4(
-        glm::vec4(rot[0] * scale.x, 0.0f), 
-        glm::vec4(rot[1] * scale.y, 0.0f), 
-        glm::vec4(rot[2] * scale.z, 0.0f), 
-        glm::vec4(position, 1.0f)          
-    );
+        glm::vec4(rot[0] * scale.x, 0.0f),
+        glm::vec4(rot[1] * scale.y, 0.0f),
+        glm::vec4(rot[2] * scale.z, 0.0f),
+        glm::vec4(position, 1.0f));
 }
 
 glm::mat4x4 Scene::Transform::parent_to_local() const
@@ -1349,11 +1475,10 @@ glm::mat4x4 Scene::Transform::parent_to_local() const
     inv_rot[1] *= inv_scale;
     inv_rot[2] *= inv_scale;
 
-    //homogeneous
+    // homogeneous
     return glm::mat4x4(
-        glm::vec4(inv_rot[0], 0.0f),         
-        glm::vec4(inv_rot[1], 0.0f),         
-        glm::vec4(inv_rot[2], 0.0f),       
-        glm::vec4(inv_rot * -position, 1.0f) 
-    );
+        glm::vec4(inv_rot[0], 0.0f),
+        glm::vec4(inv_rot[1], 0.0f),
+        glm::vec4(inv_rot[2], 0.0f),
+        glm::vec4(inv_rot * -position, 1.0f));
 }

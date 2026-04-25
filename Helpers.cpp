@@ -619,6 +619,11 @@ void Helpers::transfer_to_image_cube(void *data, size_t size, AllocatedImage &ta
 	destroy_buffer(std::move(transfer_src));
 }
 
+
+size_t Helpers::align_buffer_size(size_t current_buffer_size, size_t alignment)
+{
+    return (current_buffer_size + alignment - 1) / alignment * alignment;
+}
 void Helpers::transfer_to_cubemap_layer(
 	void const *data,
 	size_t size,
