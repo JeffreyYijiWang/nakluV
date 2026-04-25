@@ -169,7 +169,7 @@ void RTG::Configuration::usage(std::function< void(const char *, const char *) >
 	callback("--culling < none , frustum, BVH >", "How the scene should be culled");
 	callback("--animation < loop | play-once | paused >", "Animate the scene with drivers starting paused, only plays once, or loops, default plays once");
 	callback("--exposure <E>", " changes the expose of the scene by 2*E tot eh radience");
-	callback("--tone-map <linear| ACES | paused >", "does tone mapping defaulting to linear, gamma, and others");
+	callback("--tone-map <linear| ACES | gamma>", "does tone mapping defaulting to linear, gamma, and others");
 }
 
 void RTG::Configuration::cube_usage(std::function< void(const char*, const char*) > const& callback) {

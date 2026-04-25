@@ -88,7 +88,7 @@ struct RTG {
 
 		uint8_t cube_mode = 0;
 
-		uint8_t ggx_levels = 5;
+		uint8_t ggx_levels = 6;
 
 		//path.s72 format scene
 		// --scene <path>

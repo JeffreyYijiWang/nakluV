@@ -17,7 +17,7 @@
 #include <fstream>
 #include <iostream>
 #include <deque>
-
+#include "data_path.hpp"
 static uint32_t comp_brdf[] =
 #include "spv/brdf.comp.inl"
 	;
@@ -32,8 +32,9 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 {
 	// select a depth format:
 	// at least on of these two must be supported, arrourding to the spec; but neihet are required
-	/*static std::unique_ptr< Timer > timer;
-	timer.reset(new Timer([](double dt) { std::cout << "REPORT frame-time " << dt * 1000.0 << "ms" << std::endl; }));*/
+	static std::unique_ptr<Timer> timer;
+	timer.reset(new Timer([](double dt)
+						  { std::cout << "REPORT frame-time " << dt * 1000.0 << "ms" << std::endl; }));
 
 	depth_format = rtg.helpers.find_image_format(
 		{VK_FORMAT_D32_SFLOAT, VK_FORMAT_X8_D24_UNORM_PACK32},
@@ -136,10 +137,16 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_)
 	pbr_pipeline.create(rtg, render_pass, 0);
 
 	// create environment texture
-	if (scene.environment.source != "")
+
 	{
 		int width, height, n;
-		std::string environment_source = scene.scene_path + "/" + scene.environment.source;
+		std::string environment_source;
+		if (scene.environment.source != "")
+			environment_source = scene.scene_path + "/" + scene.environment.source;
+		else
+		{
+			environment_source = data_path("../resource/default_env.png");
+		}
 		std::vector<unsigned char *> images;
 		images.push_back(stbi_load(environment_source.c_str(), &width, &height, &n, 4));
 		if (images[0] == NULL)
@@ -1809,7 +1816,6 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.World_src.handle, workspace.World.handle, 1, &copy_region);
 	}
 
-
 	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
 	{ // upload object transforms:
 		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size() + pbr_instances.size()) * sizeof(ObjectsPipeline::Transform);
@@ -2177,40 +2183,36 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 			}
 		}
 
-			if (!lines_vertices.empty())
-	{ // draw with the lines pipeline;
-		vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
+		if (!lines_vertices.empty())
+		{ // draw with the lines pipeline;
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lines_pipeline.handle);
 
-		{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
-			std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
-			std::array<VkDeviceSize, 1> offsets{0};
-			vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			{ // use lines_vertice (offset 0) as vertex buffer bindign 0:
+				std::array<VkBuffer, 1> vertex_buffers{workspace.lines_vertices.handle};
+				std::array<VkDeviceSize, 1> offsets{0};
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
+
+			{ // bind teh camera descript set:
+				std::array<VkDescriptorSet, 1> descriptor_sets{
+					workspace.Camera_descriptors, // 0. camera
+				};
+				vkCmdBindDescriptorSets(
+					workspace.command_buffer,								  // command_buffer
+					VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+					lines_pipeline.layout,									  // pipline layout
+					0,														  // first set
+					uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
+					0, nullptr												  // dynamics offsets count, ptr
+				);
+			}
+
+			// draw line vertice
+			vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
 		}
-
-		{ // bind teh camera descript set:
-			std::array<VkDescriptorSet, 1> descriptor_sets{
-				workspace.Camera_descriptors, // 0. camera
-			};
-			vkCmdBindDescriptorSets(
-				workspace.command_buffer,								  // command_buffer
-				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
-				lines_pipeline.layout,									  // pipline layout
-				0,														  // first set
-				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor set count, ptr
-				0, nullptr												  // dynamics offsets count, ptr
-			);
-		}
-
-		// draw line vertice
-		vkCmdDraw(workspace.command_buffer, uint32_t(lines_vertices.size()), 1, 0, 0);
-	}
 
 		vkCmdEndRenderPass(workspace.command_buffer);
 	}
-
-	
-
-
 
 	// end recoding
 	VK(vkEndCommandBuffer(workspace.command_buffer));

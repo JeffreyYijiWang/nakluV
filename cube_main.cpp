@@ -1005,7 +1005,7 @@ int main(int argc, char **argv)
 
 			CubePipeline::IrradiancePush ipush{
 				.size = lambert_size,
-				.numSamples = 262144,
+				.numSamples = 200000,
 			};
 
 			vkCmdPushConstants(
@@ -1055,7 +1055,7 @@ int main(int argc, char **argv)
 
 				CubePipeline::SpecularPush spush{
 					.size = mip_size,
-					.numSamples = 262144,
+					.numSamples = 190000,
 					.roughness = roughness,
 					.pad = 0.0f,
 				};
@@ -1120,7 +1120,7 @@ int main(int argc, char **argv)
 
 			auto [ggx_base, ggx_ext] = split_ext(rtg.configuration.ggx_out_image);
 
-			for (uint32_t mip = 0; mip < ggx_levels; ++mip)
+			for (uint32_t mip = 1; mip < ggx_levels; ++mip)
 			{
 				uint32_t mip_size = std::max(1u, ggx_base_size >> mip);
 
@@ -1131,7 +1131,7 @@ int main(int argc, char **argv)
 						rtg, ggx_gpu.image, face, mip, mip_size);
 				}
 
-				std::string out_name = ggx_base + "." + std::to_string(mip + 1) + ggx_ext;
+				std::string out_name = ggx_base + "." + std::to_string(mip) + ggx_ext;
 				write_rgbe_cubemap_vertical(out_name, faces, mip_size);
 			}
 		}

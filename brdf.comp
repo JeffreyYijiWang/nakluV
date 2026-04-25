@@ -71,7 +71,7 @@ void main()
     if (gid.x >= pc.size || gid.y >= pc.size) return;
 
     float NoV = (float(gid.x) + 0.5) / float(pc.size);
-    float roughness = (float(gid.y) + 0.5) / float(pc.size);
+    float roughness = (float(pc.size - 1u - gid.y) + 0.5) / float(pc.size);
 
     vec3 V = vec3(sqrt(max(0.0, 1.0 - NoV * NoV)), 0.0, NoV);
     vec3 N = vec3(0.0, 0.0, 1.0);
