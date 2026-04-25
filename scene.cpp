@@ -955,6 +955,7 @@ void Scene::load(std::string filename, std::optional<std::string> requested_came
 
     { // build the camera local to world transform vectors
         std::vector<uint32_t> cur_transform_list;
+        int spot_light_index = 0;
         std::function<void(uint32_t)> fill_camera_and_light_transforms = [&](uint32_t i)
         {
             const Scene::Node &cur_node = nodes[i];
@@ -973,6 +974,12 @@ void Scene::load(std::string filename, std::optional<std::string> requested_came
                 else if (lights[cur_node.light_index].light_type == Light::Spot)
                 {
                     light_instance_count.spot_light++;
+                    // only increment shadow for spot light for now
+                    if (lights[cur_node.light_index].shadow != 0.0f)
+                    {
+                        spot_lights_sorted_indices.push_back(LightInstance{uint32_t(spot_light_index), uint32_t(cur_node.light_index), cur_transform_list});
+                        spot_light_index++;
+                    }
                 }
             }
             if (cur_node.cameras_index != -1) // Camera attached

@@ -157,7 +157,7 @@ void Render::ShadowAtlasPipeline::create(RTG &rtg, VkRenderPass render_pass, uin
     }
 }
 
-void RTGRenderer::ShadowAtlasPipeline::destroy(RTG &rtg) {
+void Render::ShadowAtlasPipeline::destroy(RTG &rtg) {
 
     if (set0_Transforms != VK_NULL_HANDLE) {
 		vkDestroyDescriptorSetLayout(rtg.device, set0_Transforms, nullptr);

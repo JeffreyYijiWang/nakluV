@@ -16,11 +16,16 @@ struct SphereLight {
 struct SpotLight {
 	vec3 POSITION;
 	uint SHADOW_SIZE;
+
 	vec3 DIRECTION;
 	float RADIUS;
-	vec3 ENERGY; // divided by pi 
+
+	vec3 ENERGY;
 	float LIMIT;
-	vec2 CONE_ANGLES;//cosine of the inner and outer angles
+
+	vec2 CONE_ANGLES;
+	vec2 pad0;
+
 	mat4 LIGHT_FROM_WORLD;
 	mat4 ATLAS_COORD_FROM_WORLD;
 };

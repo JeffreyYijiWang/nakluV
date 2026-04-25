@@ -120,7 +120,7 @@ struct Render : RTG::Application
 			uint32_t SHADOW_ATLAS_SIZE = shadow_atlas_length;
 		};
 
-		static_assert(sizeof(World) == 4 * 3 + 4 + 4 + 4 + 4, "World is the expected size.");
+		static_assert(sizeof(World) == 32, "World is the expected size.");
 
 		struct SunLight
 		{
@@ -148,10 +148,11 @@ struct Render : RTG::Application
 			glm::vec3 ENERGY;
 			float LIMIT;
 			glm::vec2 CONE_ANGLES;
+			glm::vec2 pad0 = glm::vec2(0.0f);
 			glm::mat4x4 LIGHT_FROM_WORLD;
 			glm::mat4x4 ATLAS_COORD_FROM_WORLD;
 		};
-		static_assert(sizeof(SpotLight) == 4 * 4 + 4 * 3 + 4 + 4 * 3 + 4 + 4 * 2, "SpotLight is the expected size.");
+		static_assert(sizeof(SpotLight) == 192, "SpotLight is the expected size.");
 
 		struct Transform
 		{
@@ -240,7 +241,6 @@ struct Render : RTG::Application
 		VkDescriptorSetLayout set2_TEXTURE = VK_NULL_HANDLE;
 
 		// types for descriptors:
-
 
 		struct tone_map
 		{
@@ -435,9 +435,9 @@ struct Render : RTG::Application
 		std::vector<Region> regions;
 
 		// spot lights must be sorted
-		void update_regions(std::vector<Render::ObjectsPipeline::SpotLight> &, uint8_t reduction);
+		void update_regions(std::vector<Render::ObjectsPipeline::SpotLight> &spot_lights, std::vector<Scene::LightInstance> &sorted_indices, uint8_t reduction);
 		void debug();
-		static glm::mat4 calculate_shadow_atlas_matrix(const glm::mat4& light_from_world, const Region& region, const int atlas_size);
+		static glm::mat4 calculate_shadow_atlas_matrix(const glm::mat4 &light_from_world, const Region &region, const int atlas_size);
 
 		ShadowAtlas(uint32_t size_) : size(size_) {};
 	} shadow_atlas;

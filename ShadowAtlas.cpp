@@ -2,7 +2,7 @@
 #include <iostream>
 
 // referenced https://lisyarus.github.io/blog/posts/texture-packing.html
-void Render::ShadowAtlas::update_regions(std::vector<RTGRenderer::ObjectsPipeline::SpotLight> &spot_lights, uint8_t reduction)
+void Render::ShadowAtlas::update_regions(std::vector<Render::ObjectsPipeline::SpotLight> &spot_lights, std::vector<Scene::LightInstance> &sorted_indices, uint8_t reduction)
 {
     regions.clear();
     regions.resize(spot_lights.size());
@@ -11,9 +11,9 @@ void Render::ShadowAtlas::update_regions(std::vector<RTGRenderer::ObjectsPipelin
         uint32_t x, y;
     } pen = {0, 0};
     std::vector<point> ladder;
-    for (size_t i = 0; i < spot_lights.size(); ++i)
+    for (Scene::LightInstance pair : sorted_indices)
     {
-
+        uint32_t i = pair.spot_lights_index;
         const uint32_t texture_size = spot_lights[i].shadow_size >> reduction;
 
         // allocate a texture region
@@ -51,7 +51,7 @@ void Render::ShadowAtlas::debug()
     }
 }
 
-glm::mat4 GRender::ShadowAtlas::calculate_shadow_atlas_matrix(const glm::mat4 &light_from_world, const Region &region, const int atlas_size)
+glm::mat4 Render::ShadowAtlas::calculate_shadow_atlas_matrix(const glm::mat4 &light_from_world, const Region &region, const int atlas_size)
 {
     int shadow_size = region.size;
     int shadow_x = region.x;

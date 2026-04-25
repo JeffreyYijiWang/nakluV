@@ -11,7 +11,7 @@
 
 layout(set=0,binding=0,std140) uniform World {
 	vec3 CAMERA_POSITION;
-	uint ENVIRONMENT_MIPS;
+	float ENVIRONMENT_MIPS;
 	uint SUN_LIGHT_COUNT;
 	uint SPHERE_LIGHT_COUNT;
 	uint SPOT_LIGHT_COUNT;

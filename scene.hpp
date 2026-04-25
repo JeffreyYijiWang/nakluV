@@ -112,7 +112,7 @@ struct Scene
     {
         std::string name;
         glm::vec3 tint = glm::vec3(1.0f);
-        uint32_t shadow = 0.0f;
+        uint32_t shadow = 0;
 
         enum LightType : uint8_t
         {
@@ -142,8 +142,13 @@ struct Scene
         };
 
         std::variant<Sunlight, Spherelight, Spotlight> additional_params;
+    };
 
-        // std::vector<uint32_t> local_to_world; // index 0 is root node - list of node indices to get from local to world
+    struct LightInstance
+    {
+        uint32_t lights_index = 0;
+        uint32_t spot_lights_index = 0;
+        std::vector<uint32_t> local_to_world;
     };
 
     struct

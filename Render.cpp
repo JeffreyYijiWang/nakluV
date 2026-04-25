@@ -1115,7 +1115,8 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 				.sampler = World_irradiance_sampler,
 				.imageView = World_irradiance_view,
 				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-			} VkDescriptorImageInfo World_environment_brdf_lut_info{
+			};
+			VkDescriptorImageInfo World_environment_brdf_lut_info{
 				.sampler = texture_sampler,
 				.imageView = World_environment_brdf_lut_view,
 				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -2034,7 +2035,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 
 		{ // copy transforms into Transforms_src:
 			assert(workspace.Transforms_src.allocation.mapped);
-			LambertianPipeline::Transform *out = reinterpret_cast<LambertianPipeline::Transform *>(workspace.Transforms_src.allocation.data()); // Strict aliasing violation, but it doesn't matter
+			ObjectsPipeline::Transform *out = reinterpret_cast<ObjectsPipeline::Transform *>(workspace.Transforms_src.allocation.data()); // Strict aliasing violation, but it doesn't matter
 			for (ObjectInstance const &inst : lambertian_instances)
 			{
 				*out = inst.transform;
@@ -2337,7 +2338,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		// device-side from Light_src to Light:
 
 		VkBufferCopy copy_region{
-			srcOffset = 0,
+			.srcOffset = 0,
 			.dstOffset = 0,
 			.size = light_info.sphere_light_alignment + light_info.spot_light_size,
 		};
@@ -2830,10 +2831,10 @@ void Render::update(float dt)
 			Scene::Light &cur_light = scene.lights[scene.spot_lights_sorted_indices[i].lights_index];
 			assert(cur_light.light_type == Scene::Light::LightType::Spot); // only support spot for now
 			total_shadow_size += cur_light.shadow * cur_light.shadow;
-			glm::mat4x4 cur_light_transform = scene.nodes[scene.spot_lights_sorted_indices[i].local_to_world[0]].transform.parent_from_local();
+			glm::mat4x4 cur_light_transform = scene.nodes[scene.spot_lights_sorted_indices[i].local_to_world[0]].transform.local_to_parent();
 			for (int j = 1; j < scene.spot_lights_sorted_indices[i].local_to_world.size(); ++j)
 			{
-				cur_light_transform *= scene.nodes[scene.spot_lights_sorted_indices[i].local_to_world[j]].transform.parent_from_local();
+				cur_light_transform *= scene.nodes[scene.spot_lights_sorted_indices[i].local_to_world[j]].transform.local_to_parent();
 			}
 
 			{ // create light frustum and light from world matrices
@@ -2849,7 +2850,7 @@ void Render::update(float dt)
 				glm::vec3 right = glm::normalize(glm::cross(forward, world_up));
 				glm::vec3 up = glm::normalize(glm::cross(right, forward));
 
-				Scene::Light::ParamSpot spot_param = std::get<Scene::Light::ParamSpot>(cur_light.additional_params);
+				Scene::Light::Spotlight spot_param = std::get<Scene::Light::Spotlight>(cur_light.additional_params);
 				float aspect = 1.0f;
 				float near = 0.02f;
 				float far;
@@ -2884,16 +2885,6 @@ void Render::update(float dt)
 	if (rtg.configuration.culling_settings == 1)
 	{ // frustum culling is on
 		glm::mat4x4 world_from_clip = glm::inverse(culling_camera == CameraMode::Scene ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
-		std::array<glm::vec4, 8> clip_space_coordinates = {
-			glm::vec4(1.0f, 1.0f, 0.0f, 1.0f),	 // Near top right
-			glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f),	 // Near top left
-			glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),	 // Near bottom right
-			glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f), // Near bottom left
-			glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),	 // Far top right
-			glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),	 // Far top left
-			glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),	 // Far bottom right
-			glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)	 // Far bottom left
-		};
 		// Transform clip space to world space and apply perspective divide
 		for (int j = 0; j < 8; ++j)
 		{
@@ -2908,16 +2899,6 @@ void Render::update(float dt)
 			if (rtg.configuration.culling_settings != 1)
 			{
 				glm::mat4x4 world_from_clip = glm::inverse(culling_camera == CameraMode::Scene ? clip_from_view[0] * view_from_world[0] : clip_from_view[1] * view_from_world[1]);
-				std::array<glm::vec4, 8> clip_space_coordinates = {
-					glm::vec4(1.0f, 1.0f, 0.0f, 1.0f),	 // Near top right
-					glm::vec4(-1.0f, 1.0f, 0.0f, 1.0f),	 // Near top left
-					glm::vec4(1.0f, -1.0f, 0.0f, 1.0f),	 // Near bottom right
-					glm::vec4(-1.0f, -1.0f, 0.0f, 1.0f), // Near bottom left
-					glm::vec4(1.0f, 1.0f, 1.0f, 1.0f),	 // Far top right
-					glm::vec4(-1.0f, 1.0f, 1.0f, 1.0f),	 // Far top left
-					glm::vec4(1.0f, -1.0f, 1.0f, 1.0f),	 // Far bottom right
-					glm::vec4(-1.0f, -1.0f, 1.0f, 1.0f)	 // Far bottom left
-				};
 				// Transform clip space to world space and apply perspective divide
 				for (int j = 0; j < 8; ++j)
 				{
