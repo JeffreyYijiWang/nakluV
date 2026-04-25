@@ -17,7 +17,7 @@ void Render::ObjectsPipeline::create(RTG &rtg, VkRenderPass render_pass, uint32_
 	VkShaderModule frag_module = rtg.helpers.create_shader_module(frag_code);
 
 	{ // the set0_world layout hold workl dinfo in a unhiform buffer use in the fragment shader:
-		std::array<VkDescriptorSetLayoutBinding, 7> bindings{
+		std::array<VkDescriptorSetLayoutBinding, 8> bindings{
 			VkDescriptorSetLayoutBinding{
 				.binding = 0,
 				.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -53,6 +53,12 @@ void Render::ObjectsPipeline::create(RTG &rtg, VkRenderPass render_pass, uint32_
 				.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
 				.descriptorCount = 1,
 				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT},
+				  VkDescriptorSetLayoutBinding{ // shadow atlas
+				.binding = 7,
+				.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+				.descriptorCount = 1,
+				.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT
+			},
 		};
 
 		VkDescriptorSetLayoutCreateInfo create_info{

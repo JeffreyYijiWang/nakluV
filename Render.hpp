@@ -31,6 +31,7 @@ struct Render : RTG::Application
 	VkFormat depth_format{};
 	// Render passes describe how pipelines write to images:
 	VkRenderPass render_pass = VK_NULL_HANDLE;
+	VkRenderPass shadow_atlas_pass = VK_NULL_HANDLE;
 
 	// Pipelines:
 	struct BackgroundPipeline
@@ -77,6 +78,29 @@ struct Render : RTG::Application
 		void destroy(RTG &);
 	} lines_pipeline;
 
+	struct ShadowAtlasPipeline
+	{
+		// descriptor set layouts:
+		VkDescriptorSetLayout set0_Transforms = VK_NULL_HANDLE;
+
+		struct Light
+		{
+			glm::mat4 LIGHT_FROM_WORLD;
+		} light;
+		static_assert(sizeof(Light) == 16 * 4, "light buffer structure is packed");
+
+		VkPipelineLayout layout = VK_NULL_HANDLE;
+
+		using Vertex = PosNorTanTexVertex;
+
+		VkPipeline handle = VK_NULL_HANDLE;
+
+		void create(RTG &, VkRenderPass render_pass, uint32_t subpass);
+		void destroy(RTG &);
+	} shadow_pipeline;
+
+	static constexpr uint32_t shadow_atlas_length = 4096;
+
 	struct ObjectsPipeline
 	{
 
@@ -93,6 +117,7 @@ struct Render : RTG::Application
 			uint32_t SUN_LIGHT_COUNT;
 			uint32_t SPHERE_LIGHT_COUNT;
 			uint32_t SPOT_LIGHT_COUNT;
+			uint32_t SHADOW_ATLAS_SIZE = shadow_atlas_length;
 		};
 
 		static_assert(sizeof(World) == 4 * 3 + 4 + 4 + 4 + 4, "World is the expected size.");
@@ -117,12 +142,14 @@ struct Render : RTG::Application
 		struct SpotLight
 		{
 			glm::vec3 POSITION;
-			uint32_t shadow_size;
+			uint32_t shadow_size = 0;
 			glm::vec3 DIRECTION;
 			float RADIUS;
 			glm::vec3 ENERGY;
 			float LIMIT;
 			glm::vec2 CONE_ANGLES;
+			glm::mat4x4 LIGHT_FROM_WORLD;
+			glm::mat4x4 ATLAS_COORD_FROM_WORLD;
 		};
 		static_assert(sizeof(SpotLight) == 4 * 4 + 4 * 3 + 4 + 4 * 3 + 4 + 4 * 2, "SpotLight is the expected size.");
 
@@ -213,51 +240,7 @@ struct Render : RTG::Application
 		VkDescriptorSetLayout set2_TEXTURE = VK_NULL_HANDLE;
 
 		// types for descriptors:
-		struct World
-		{
-			glm::vec3 POSITION;
-			uint32_t shadow_size;
-			float ENVIRONMENT_MIPS;
-			uint32_t SUN_LIGHT_COUNT;
-			uint32_t SPHERE_LIGHT_COUNT;
-			uint32_t SPOT_LIGHT_COUNT;
-		};
 
-		struct SunLight
-		{
-			glm::vec4 POSITION; // w padding
-			glm::vec3 ENERGY;
-			float SIN_ANGLE;
-		};
-		static_assert(sizeof(SunLight) == 4 * 4 + 4 * 3 + 4, "SunLight is the expected size.");
-
-		struct SpotLight
-		{
-			glm::vec4 POSITION;
-			glm::vec3 DIRECTION;
-			float RADIUS;
-			glm::vec3 ENERGY;
-			float LIMIT;
-			glm::vec2 CONE_ANGLES;
-		};
-		static_assert(sizeof(SpotLight) == 4 * 4 + 4 * 3 + 4 + 4 * 3 + 4 + 4 * 2, "SpotLight is the expected size.");
-
-		struct SphereLight
-		{
-			glm::vec3 POSITION;
-			float RADIUS;
-			glm::vec3 ENERGY;
-			float LIMIT;
-		};
-		static_assert(sizeof(SphereLight) == 4 * 3 + 4 + 4 * 3 + 4, "SphereLight is the expected size.");
-		struct Transform
-		{
-			mat4 CLIP_FROM_LOCAL;
-			mat4 WORLD_FROM_LOCAL;
-			mat4 WORLD_FROM_LOCAL_NORMAL;
-		};
-		static_assert(sizeof(Transform) == 16 * 4 + 16 * 4 + 16 * 4, " Transform is the expected size.");
-		// push constants
 
 		struct tone_map
 		{
@@ -343,6 +326,10 @@ struct Render : RTG::Application
 	VkDescriptorPool texture_descriptor_pool = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSet> texture_descriptors;
 
+	VkImageView Shadow_atlas_view = VK_NULL_HANDLE;
+	VkSampler shadow_sampler = VK_NULL_HANDLE;
+	VkFramebuffer shadow_framebuffer = VK_NULL_HANDLE;
+
 	struct
 	{
 		size_t sun_light_size;
@@ -424,12 +411,17 @@ struct Render : RTG::Application
 	};
 	std::vector<ObjectInstance> lambertian_instances, environment_instances, mirror_instances, pbr_instances;
 
+	std::array<std::vector<uint32_t>, 4> in_view_instances; // order of array is lambertian, environment, mirror, pbr
+
+	std::vector<std::array<std::vector<uint32_t>, 4>> in_spot_light_instances;
+
 	std::vector<ObjectsPipeline::SunLight> sun_lights;
 	std::vector<ObjectsPipeline::SphereLight> sphere_lights;
 	std::vector<ObjectsPipeline::SpotLight> spot_lights;
+	std::vector<glm::mat4x4> spot_light_from_world;
 
 	uint64_t total_shadow_size = 0;
-	static constexpr uint32_t shadow_atlas_length = 2048;
+	Helpers::AllocatedImage shadow_atlas_image;
 
 	struct ShadowAtlas
 	{
@@ -443,11 +435,12 @@ struct Render : RTG::Application
 		std::vector<Region> regions;
 
 		// spot lights must be sorted
-		void update_regions(std::vector<RTGRenderer::LambertianPipeline::SpotLight> &, uint8_t reduction);
+		void update_regions(std::vector<Render::ObjectsPipeline::SpotLight> &, uint8_t reduction);
 		void debug();
+		static glm::mat4 calculate_shadow_atlas_matrix(const glm::mat4& light_from_world, const Region& region, const int atlas_size);
 
 		ShadowAtlas(uint32_t size_) : size(size_) {};
-	} shadow_atlas = ShadowAtlas(shadow_atlas_length);
+	} shadow_atlas;
 	//-------------------------------------
 	void set_animation_time(float t);
 

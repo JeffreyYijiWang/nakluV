@@ -95,7 +95,11 @@ const cube_shaders = [
     maek.GLSLC('lambert_irradiance.comp', 'spv/lambertian-irradiance.comp'),
     maek.GLSLC('ggx.comp', 'spv/ggx.comp'),
 ];
-
+const shadow_shaders = [
+	maek.GLSLC('glsl/shadow.vert', 'spv/shadow.vert', {GLSLCFlags: []}),
+	maek.GLSLC('glsl/shadow.frag', 'spv/shadow.frag', {GLSLCFlags: []}),
+];
+main_objs.push( maek.CPP('ShadowPipeline.cpp', undefined, { depends:[...shadow_shaders] } ) );
 const cube_pipeline_obj =
     maek.CPP('CubePipeline.cpp', undefined, { depends: [...cube_shaders] });
 main_objs.push(cube_pipeline_obj);

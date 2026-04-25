@@ -37,6 +37,7 @@ layout(set=0, binding=6, std140) readonly buffer SpotLights {
 	SpotLight SPOTLIGHTS[];
 };
 
+layout(set=0, binding=7) uniform sampler2DShadow SHADOW_ATLAS;
 
 
 layout(set=2, binding=0) uniform sampler2D NORMAL;
