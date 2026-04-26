@@ -183,7 +183,7 @@ void Helpers::transfer_to_buffer(void const *data, size_t size, AllocatedBuffer 
 	std::memcpy(transfer_src.allocation.data(), data, size);
 
 	{ // record VPU-> GPU transfer to command buffer
-			std::cout << "about to reset traanswer to buffer: " << (void*)transfer_command_buffer << std::endl;
+		std::cout << "about to reset traanswer to buffer: " << (void *)transfer_command_buffer << std::endl;
 		VK(vkResetCommandBuffer(transfer_command_buffer, 0));
 
 		VkCommandBufferBeginInfo begin_info{
@@ -241,7 +241,7 @@ void Helpers::transfer_to_image(void const *data, size_t size, AllocatedImage &t
 	std::memcpy(transfer_src.allocation.data(), data, size);
 
 	// begine recording a command bufer
-		std::cout << "about to reset to transwer to image: " << (void*)transfer_command_buffer << std::endl;
+	std::cout << "about to reset to transwer to image: " << (void *)transfer_command_buffer << std::endl;
 	VK(vkResetCommandBuffer(transfer_command_buffer, 0));
 
 	VkCommandBufferBeginInfo begin_info{
@@ -370,7 +370,7 @@ void Helpers::transfer_to_image_2d(
 
 	std::memcpy(transfer_src.allocation.data(), data, size);
 
-		std::cout << "about to reset to iamge 2d: " << (void*)transfer_command_buffer << std::endl;
+	std::cout << "about to reset to iamge 2d: " << (void *)transfer_command_buffer << std::endl;
 	VK(vkResetCommandBuffer(transfer_command_buffer, 0));
 
 	VkCommandBufferBeginInfo begin_info{
@@ -501,7 +501,7 @@ void Helpers::transfer_to_image_cube(void *data, size_t size, AllocatedImage &ta
 
 	std::memcpy(transfer_src.allocation.data(), data, size);
 
-		std::cout << "about to reset image to cube: " << (void*)transfer_command_buffer << std::endl;
+	std::cout << "about to reset image to cube: " << (void *)transfer_command_buffer << std::endl;
 	VK(vkResetCommandBuffer(transfer_command_buffer, 0));
 
 	VkCommandBufferBeginInfo begin_info{
@@ -619,10 +619,14 @@ void Helpers::transfer_to_image_cube(void *data, size_t size, AllocatedImage &ta
 	destroy_buffer(std::move(transfer_src));
 }
 
-
 size_t Helpers::align_buffer_size(size_t current_buffer_size, size_t alignment)
 {
-    return (current_buffer_size + alignment - 1) / alignment * alignment;
+	if (alignment == 0)
+	{
+		return current_buffer_size;
+	}
+
+	return (current_buffer_size + alignment - 1) / alignment * alignment;
 }
 void Helpers::transfer_to_cubemap_layer(
 	void const *data,
@@ -650,7 +654,7 @@ void Helpers::transfer_to_cubemap_layer(
 		Mapped);
 
 	std::memcpy(transfer_src.allocation.data(), data, size);
-	std::cout << "about to trasnfer  buffer: " << (void*)transfer_command_buffer << std::endl;
+	std::cout << "about to trasnfer  buffer: " << (void *)transfer_command_buffer << std::endl;
 	VK(vkResetCommandBuffer(transfer_command_buffer, 0));
 
 	VkCommandBufferBeginInfo begin_info{
@@ -762,7 +766,7 @@ void Helpers::transfer_to_cubemap_layer(
 	destroy_buffer(std::move(transfer_src));
 }
 Helpers::AllocatedImage Helpers::create_cubemap(
-	VkExtent2D const& extent,
+	VkExtent2D const &extent,
 	VkFormat format,
 	VkImageTiling tiling,
 	VkImageUsageFlags usage,

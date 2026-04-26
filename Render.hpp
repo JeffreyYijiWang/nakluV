@@ -326,6 +326,8 @@ struct Render : RTG::Application
 	VkDescriptorPool texture_descriptor_pool = VK_NULL_HANDLE;
 	std::vector<VkDescriptorSet> texture_descriptors;
 
+	VkSampler brdf_sampler = VK_NULL_HANDLE;
+
 	VkImageView Shadow_atlas_view = VK_NULL_HANDLE;
 	VkSampler shadow_sampler = VK_NULL_HANDLE;
 	VkFramebuffer shadow_framebuffer = VK_NULL_HANDLE;

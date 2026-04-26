@@ -18,6 +18,7 @@
 #include <iostream>
 #include <deque>
 #include "data_path.hpp"
+
 static uint32_t comp_brdf[] =
 #include "spv/brdf.comp.inl"
 	;
@@ -257,8 +258,6 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 	pbr_pipeline.create(rtg, render_pass, 0);
 	shadow_pipeline.create(rtg, shadow_atlas_pass, 0);
 
-	// create environment texture
-	if (scene.environment.source != "")
 	{
 		int width, height, n;
 		std::string environment_source;
@@ -469,7 +468,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			VK(vkCreateSampler(rtg.device, &create_info, nullptr, &World_irradiance_sampler));
 		}
 
-		{
+		{ // create dsciptors
 			VkDescriptorPool cube_descriptor_pool = VK_NULL_HANDLE;
 			{
 				std::array<VkDescriptorPoolSize, 2> pool_sizes{
@@ -676,7 +675,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
 			.unnormalizedCoordinates = VK_FALSE,
 		};
-		VK(vkCreateSampler(rtg.device, &create_info, nullptr, &texture_sampler));
+		VK(vkCreateSampler(rtg.device, &create_info, nullptr, &brdf_sampler));
 	}
 
 	{ // environment BRDF LUT
@@ -922,6 +921,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 		VK(vkQueueSubmit(rtg.graphics_queue, 1, &submit_info, VK_NULL_HANDLE));
 		VK(vkQueueWaitIdle(rtg.graphics_queue));
 
+		std::cout << "BRDF done\n";
 		vkDestroyDescriptorPool(rtg.device, brdf_descriptor_pool, nullptr);
 		vkDestroyPipeline(rtg.device, pipeline, nullptr);
 		vkDestroyPipelineLayout(rtg.device, pipeline_layout, nullptr);
@@ -941,7 +941,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			},
 			VkDescriptorPoolSize{
 				.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-				.descriptorCount = 3 * per_workspace, // one descriptoper set, one set per workspace
+				.descriptorCount = 4 * per_workspace, // one descriptoper set, one set per workspace
 			},
 			VkDescriptorPoolSize{
 				.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -962,8 +962,10 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 	}
 
 	workspaces.resize(rtg.workspaces.size());
+	uint32_t index_work = 0;
 	for (Workspace &workspace : workspaces)
 	{
+		std::cout << "workspace " << index_work << " begin\n";
 		{ // allocate command buffer:
 			VkCommandBufferAllocateInfo alloc_info{
 				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -973,6 +975,8 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			};
 			VK(vkAllocateCommandBuffers(rtg.device, &alloc_info, &workspace.command_buffer));
 		}
+
+		std::cout << "after alloc command buffer\n";
 
 		workspace.Camera_src = rtg.helpers.create_buffer(
 			sizeof(LinesPipeline::Camera),
@@ -1027,6 +1031,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			// not weill actula fill in this descirpt set beflow
 		}
 
+		std::cout << "after alloc world descirptsrs buffer\n";
 		// light descripters
 		{ // set light infos
 			light_info.sun_light_size = std::max(scene.light_instance_count.sun_light * sizeof(ObjectsPipeline::SunLight),
@@ -1038,18 +1043,22 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			light_info.spot_light_size = std::max(scene.light_instance_count.spot_light * sizeof(ObjectsPipeline::SpotLight),
 												  sizeof(ObjectsPipeline::SpotLight));
 
+			std::cout << "assign coujnts\n";
 			world.SUN_LIGHT_COUNT = scene.light_instance_count.sun_light;
 			world.SPHERE_LIGHT_COUNT = scene.light_instance_count.sphere_light;
 			world.SPOT_LIGHT_COUNT = scene.light_instance_count.spot_light;
 		}
 		{ // create Light buffers
 			size_t needed_bytes = light_info.sphere_light_alignment + light_info.spot_light_size;
+			std::cout << "creting light src buffer\n";
 			workspace.Light_src = rtg.helpers.create_buffer(
 				needed_bytes,
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				Helpers::Mapped // get a pointer to the memory
 			);
+
+			std::cout << "creting ligjt buffer\n";
 			workspace.Light = rtg.helpers.create_buffer(
 				needed_bytes,
 				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
@@ -1068,6 +1077,8 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 
 			VK(vkAllocateDescriptorSets(rtg.device, &alloc_info, &workspace.Transforms_descriptors));
 		}
+
+		std::cout << "after alloc sets buffer\n";
 
 		{ // point descriptors to buffer:
 			VkDescriptorBufferInfo Camera_info{
@@ -1089,7 +1100,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			};
 			VkDescriptorBufferInfo SphereLight_info{
 				.buffer = workspace.Light.handle,
-				.offset = light_info.sun_light_size,
+				.offset = light_info.sun_light_alignment,
 				.range = light_info.sphere_light_size,
 			};
 			VkDescriptorBufferInfo SpotLight_info{
@@ -1101,7 +1112,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 			VkDescriptorImageInfo ShadowAtlas_info{
 				.sampler = shadow_sampler,
 				.imageView = Shadow_atlas_view,
-				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
 			};
 			VkDescriptorImageInfo World_environment_info{
 				.sampler = World_environment_sampler,
@@ -1115,7 +1126,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			};
 			VkDescriptorImageInfo World_environment_brdf_lut_info{
-				.sampler = texture_sampler,
+				.sampler = brdf_sampler,
 				.imageView = World_environment_brdf_lut_view,
 				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 			};
@@ -1207,7 +1218,7 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 				VkWriteDescriptorSet{
 					.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 					.dstSet = workspace.World_descriptors,
-					.dstBinding = 6,
+					.dstBinding = 7,
 					.dstArrayElement = 0,
 					.descriptorCount = 1,
 					.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1223,7 +1234,9 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 				nullptr					 // pDescriptorCopies
 			);
 		}
+		index_work++;
 	}
+	std::cout << "after workspace resize\n";
 
 	{ // create object vertices
 		std::vector<PosNorTanTexVertex> vertices;
@@ -1579,6 +1592,9 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 
 		vkUpdateDescriptorSets(rtg.device, uint32_t(writes.size()), writes.data(), 0, nullptr);
 	}
+
+	std::cout << "after texture loading\n";
+
 	{ // setup camera if no --camera in the command line, scene camera is set in update
 		if (!rtg_.configuration.scene_camera.has_value())
 		{
@@ -1677,6 +1693,17 @@ Render::Render(RTG &rtg_, Scene &scene_) : rtg(rtg_), scene(scene_), shadow_atla
 
 Render::~Render()
 {
+
+	vkDeviceWaitIdle(rtg.device);
+
+	pbr_pipeline.destroy(rtg);
+	shadow_pipeline.destroy(rtg);
+	background_pipeline.destroy(rtg);
+	lines_pipeline.destroy(rtg);
+	objects_pipeline.destroy(rtg);
+	environment_pipeline.destroy(rtg);
+	mirror_pipeline.destroy(rtg);
+
 	// just in case rendering is still in flight, don't destroy resources:
 	//(not using VK macro to avoid throw-ing in destructor)
 	if (VkResult result = vkDeviceWaitIdle(rtg.device); result != VK_SUCCESS)
@@ -1745,6 +1772,12 @@ Render::~Render()
 	{
 		vkDestroySampler(rtg.device, texture_sampler, nullptr);
 		texture_sampler = VK_NULL_HANDLE;
+	}
+
+	if (brdf_sampler)
+	{
+		vkDestroySampler(rtg.device, brdf_sampler, nullptr);
+		brdf_sampler = VK_NULL_HANDLE;
 	}
 
 	if (shadow_sampler)
@@ -1852,13 +1885,6 @@ Render::~Render()
 		descriptor_pool = nullptr;
 		// this also free the descriptor sets allocated from the pool
 	}
-	background_pipeline.destroy(rtg);
-	lines_pipeline.destroy(rtg);
-	objects_pipeline.destroy(rtg);
-	environment_pipeline.destroy(rtg);
-	mirror_pipeline.destroy(rtg);
-	pbr_pipeline.destroy(rtg);
-	shadow_pipeline.destroy(rtg);
 
 	// DESTORY COMMAND POOL
 	if (command_pool != VK_NULL_HANDLE)
@@ -1870,6 +1896,12 @@ Render::~Render()
 	if (render_pass != VK_NULL_HANDLE)
 	{
 		vkDestroyRenderPass(rtg.device, render_pass, nullptr);
+		render_pass = VK_NULL_HANDLE;
+	}
+
+	if (shadow_atlas_pass != VK_NULL_HANDLE)
+	{
+		vkDestroyRenderPass(rtg.device, shadow_atlas_pass, nullptr);
 		render_pass = VK_NULL_HANDLE;
 	}
 }
@@ -2065,48 +2097,144 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.Transforms_src.handle, workspace.Transforms.handle, 1, &copy_region);
 	}
 
-	{ // upload camera info
-		LinesPipeline::Camera camera{
-			.CLIP_FROM_WORLD = CLIP_FROM_WORLD};
-		assert(workspace.Camera_src.size == sizeof(camera));
+	VkBufferMemoryBarrier buffer_memory_barrier{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+		.buffer = workspace.Transforms.handle,
+		.size = VK_WHOLE_SIZE,
+	};
+	vkCmdPipelineBarrier(workspace.command_buffer,
+						 VK_PIPELINE_STAGE_TRANSFER_BIT,	 // srcStageMask
+						 VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStageMask
+						 0,									 // dependencyFlags
+						 0, nullptr,						 // memoryBarriers (count, data)
+						 1, &buffer_memory_barrier,			 // bufferMemoryBarriers (count, data)
+						 0, nullptr							 // imageMemoryBarriers (count, data)
+	);
 
-		// host-side copy into Camera_src:
-		memcpy(workspace.Camera_src.allocation.data(), &camera, sizeof(camera));
-
-		// ad device-sside copy form Camera_src -> cmera:
-		assert(workspace.Camera_src.size == workspace.Camera.size);
-		VkBufferCopy copy_region{
-			.srcOffset = 0,
-			.dstOffset = 0,
-			.size = workspace.Camera_src.size,
+	{ // shadow atlas pass:
+		std::array<VkClearValue, 1> clear_values{
+			VkClearValue{.depthStencil{.depth = 1.0f, .stencil = 0}},
+		};
+		VkRenderPassBeginInfo begin_info{
+			.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+			.renderPass = shadow_atlas_pass,
+			.framebuffer = shadow_framebuffer,
+			.renderArea{
+				.offset = {.x = 0, .y = 0},
+				.extent = {.width = shadow_atlas_length, .height = shadow_atlas_length},
+			},
+			.clearValueCount = uint32_t(clear_values.size()),
+			.pClearValues = clear_values.data(),
 		};
 
-		vkCmdCopyBuffer(workspace.command_buffer, workspace.Camera_src.handle, workspace.Camera.handle, 1, &copy_region);
+		vkCmdBeginRenderPass(workspace.command_buffer, &begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
+		{
+			// bind Transforms descriptor set:
+			std::array<VkDescriptorSet, 1> descriptor_sets{
+				workspace.Transforms_descriptors, // 1: Transforms
+			};
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,								  // command buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+				shadow_pipeline.layout,									  // pipeline layout
+				0,														  // first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor sets count, ptr
+				0, nullptr												  // dynamic offsets count, ptr
+			);
+		}
+		if (!spot_lights.empty())
+		{
+			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadow_pipeline.handle);
+
+			{ // use object_vertices (offset 0) as vertex buffer binding 0:
+				std::array<VkBuffer, 1> vertex_buffers{object_vertices.handle};
+				std::array<VkDeviceSize, 1> offsets{0};
+				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
+			}
+			for (uint32_t i = 0; i < scene.spot_lights_sorted_indices.size(); ++i)
+			{
+				uint32_t light_index = scene.spot_lights_sorted_indices[i].spot_lights_index;
+				ShadowAtlas::Region &region = shadow_atlas.regions[light_index];
+				if (region.size == 0)
+					continue; // skip shadow of size 0
+				spot_lights[light_index].LIGHT_FROM_WORLD = spot_light_from_world[i];
+				spot_lights[light_index].ATLAS_COORD_FROM_WORLD = ShadowAtlas::calculate_shadow_atlas_matrix(spot_light_from_world[i], region, shadow_atlas_length);
+				{ // push light:
+					ShadowAtlasPipeline::Light push{
+						.LIGHT_FROM_WORLD = spot_light_from_world[i],
+					};
+					vkCmdPushConstants(workspace.command_buffer, shadow_pipeline.layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(push), &push);
+				}
+				{ // set viewport and scissors
+					VkExtent2D extent = {region.size, region.size};
+					VkOffset2D offset = {.x = int32_t(region.x), .y = int32_t(region.y)};
+
+					{ // set scissor rectangle:
+						VkRect2D scissor{
+							.offset = offset,
+							.extent = extent,
+						};
+						vkCmdSetScissor(workspace.command_buffer, 0, 1, &scissor);
+					}
+					{ // configure viewport transform:
+						VkViewport viewport{
+							.x = float(offset.x),
+							.y = float(offset.y),
+							.width = float(extent.width),
+							.height = float(extent.height),
+							.minDepth = 0.0f,
+							.maxDepth = 1.0f,
+						};
+						vkCmdSetViewport(workspace.command_buffer, 0, 1, &viewport);
+					}
+				}
+
+				// draw all instances:
+
+				for (uint32_t index : in_spot_light_instances[i][static_cast<uint32_t>(Scene::Material::Lambertian)])
+				{
+					ObjectInstance const &inst = lambertian_instances[index];
+
+					vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+				}
+
+				uint32_t index_offset = uint32_t(lambertian_instances.size()); // account for lambertian size
+				for (uint32_t index : in_spot_light_instances[i][static_cast<uint32_t>(Scene::Material::Environment)])
+				{
+					ObjectInstance const &inst = environment_instances[index];
+					index += index_offset;
+					vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+				}
+				index_offset = uint32_t(lambertian_instances.size() + environment_instances.size()); // account for lambertian and environment size
+				for (uint32_t index : in_spot_light_instances[i][static_cast<uint32_t>(Scene::Material::Mirror)])
+				{
+					ObjectInstance const &inst = mirror_instances[index];
+					index += index_offset;
+					vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+				}
+				index_offset = uint32_t(lambertian_instances.size() + environment_instances.size() + mirror_instances.size()); // account for lambertian, environment, and mirror size
+				for (uint32_t index : in_spot_light_instances[i][static_cast<uint32_t>(Scene::Material::PBR)])
+				{
+					ObjectInstance const &inst = pbr_instances[index];
+					index += index_offset;
+					vkCmdDraw(workspace.command_buffer, inst.vertices.count, 1, inst.vertices.first, index);
+				}
+			}
+		}
+		vkCmdEndRenderPass(workspace.command_buffer);
 	}
 
-	{ // upload world info
-		assert(workspace.World_src.size == sizeof(world));
+	if (!lines_vertices.empty())
+	{
+		size_t needed_bytes =
+			lines_vertices.size() * sizeof(LinesPipeline::Vertex);
 
-		// host-side copy into Camera_src:
-		memcpy(workspace.World_src.allocation.data(), &world, sizeof(world));
-
-		// ad device-sside copy form Camera_src -> cmera:
-		assert(workspace.World_src.size == workspace.World.size);
-		VkBufferCopy copy_region{
-			.srcOffset = 0,
-			.dstOffset = 0,
-			.size = workspace.World_src.size,
-		};
-
-		vkCmdCopyBuffer(workspace.command_buffer, workspace.World_src.handle, workspace.World.handle, 1, &copy_region);
-	}
-
-
-	if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
-	{ // upload object transforms:
-		size_t needed_bytes = (lambertian_instances.size() + environment_instances.size() + mirror_instances.size() + pbr_instances.size()) * sizeof(ObjectsPipeline::Transform);
-		if (workspace.Transforms_src.handle == VK_NULL_HANDLE ||
-			workspace.Transforms_src.size < needed_bytes)
+		if (workspace.lines_vertices_src.handle == VK_NULL_HANDLE ||
+			workspace.lines_vertices_src.size < needed_bytes)
 		{
 			// round to the next multiple of 4k to avaoid re-allocating continuousely if vertex count grows slowly
 			size_t new_bytes = ((needed_bytes + 4096) / 4096) * 4096;
@@ -2152,6 +2280,25 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.lines_vertices_src.handle, workspace.lines_vertices.handle, 1, &copy_region);
 	}
 
+	{ // upload camera info
+		LinesPipeline::Camera camera{
+			.CLIP_FROM_WORLD = CLIP_FROM_WORLD};
+		assert(workspace.Camera_src.size == sizeof(camera));
+
+		// host-side copy into Camera_src:
+		memcpy(workspace.Camera_src.allocation.data(), &camera, sizeof(camera));
+
+		// ad device-sside copy form Camera_src -> cmera:
+		assert(workspace.Camera_src.size == workspace.Camera.size);
+		VkBufferCopy copy_region{
+			.srcOffset = 0,
+			.dstOffset = 0,
+			.size = workspace.Camera_src.size,
+		};
+
+		vkCmdCopyBuffer(workspace.command_buffer, workspace.Camera_src.handle, workspace.Camera.handle, 1, &copy_region);
+	}
+
 	{ // upload world info
 		assert(workspace.World_src.size == sizeof(world));
 
@@ -2169,7 +2316,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.World_src.handle, workspace.World.handle, 1, &copy_region);
 	}
 
-	if (!spot_lights.empty() && !sun_lights.empty() && !sphere_lights.empty())
+	if (!spot_lights.empty() || !sun_lights.empty() || !sphere_lights.empty())
 	{
 		{ // copy lights into Light_src:
 			assert(workspace.Light_src.allocation.mapped);
@@ -2205,23 +2352,25 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 		vkCmdCopyBuffer(workspace.command_buffer, workspace.Light_src.handle, workspace.Light.handle, 1, &copy_region);
 	}
 
-	{ // memory barrier to make sure copies complete before rendign happens:
-		VkMemoryBarrier memory_barrier{
-			.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-			.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
-			.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
-		};
+	VkBufferMemoryBarrier transform_barrier{
+		.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+		.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+		.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+		.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+		.buffer = workspace.Transforms.handle,
+		.offset = 0,
+		.size = workspace.Transforms.size,
+	};
 
-		vkCmdPipelineBarrier(workspace.command_buffer,
-							 VK_PIPELINE_STAGE_TRANSFER_BIT,	 // srcStageMask
-							 VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStagemask
-							 0,									 // dependency Flags
-							 1, &memory_barrier,				 // mmoryBarriers (count, data)
-							 0, nullptr,						 // bufferMomroyBarrier( count, data)
-							 0, nullptr							 // imageMemoryBarrier(count, data)
-		);
-	}
-
+	vkCmdPipelineBarrier(
+		workspace.command_buffer,
+		VK_PIPELINE_STAGE_TRANSFER_BIT,
+		VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+		0,
+		0, nullptr,
+		1, &transform_barrier,
+		0, nullptr);
 	{ // render pass
 		std::array<VkClearValue, 2> clear_values{
 
@@ -2300,23 +2449,6 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 			vkCmdDraw(workspace.command_buffer, 3, 1, 0, 0);
 		}
 
-		if (!lambertian_instances.empty() || !environment_instances.empty() || !mirror_instances.empty() || !pbr_instances.empty())
-		{
-			// bind Transforms descriptor set:
-			std::array<VkDescriptorSet, 2> descriptor_sets{
-				workspace.World_descriptors,	  // 0: World
-				workspace.Transforms_descriptors, // 1: Transforms
-			};
-			vkCmdBindDescriptorSets(
-				workspace.command_buffer,								  // command buffer
-				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
-				objects_pipeline.layout,								  // pipeline layout
-				0,														  // first set
-				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor sets count, ptr
-				0, nullptr												  // dynamic offsets count, ptr
-			);
-		}
-
 		if (!lambertian_instances.empty())
 		{ // draw with the object pipeline:
 			vkCmdBindPipeline(workspace.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objects_pipeline.handle);
@@ -2338,7 +2470,19 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 			}
 
 			// camera descriptor set is stil bounde (!)
-
+			// bind Transforms descriptor set:
+			std::array<VkDescriptorSet, 2> descriptor_sets{
+				workspace.World_descriptors,	  // 0: World
+				workspace.Transforms_descriptors, // 1: Transforms
+			};
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,								  // command buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+				objects_pipeline.layout,								  // pipeline layout
+				0,														  // first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor sets count, ptr
+				0, nullptr												  // dynamic offsets count, ptr
+			);
 			// draw all instaces
 			for (ObjectInstance const &inst : lambertian_instances)
 			{
@@ -2367,7 +2511,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 					.expose = float(expose),
 					.toneMapMode = int(toneMapMode),
 				};
-				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
+				vkCmdPushConstants(workspace.command_buffer, environment_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
 			}
 
 			{ // use object_vertices (offset 0) as vertex buffer binding 0:
@@ -2376,7 +2520,20 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
 			}
 
-			// word descriptor set is still bound
+			// bind Transforms descriptor set:
+			std::array<VkDescriptorSet, 2> descriptor_sets{
+				workspace.World_descriptors,	  // 0: World
+				workspace.Transforms_descriptors, // 1: Transforms
+			};
+
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,								  // command buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+				environment_pipeline.layout,							  // pipeline layout
+				0,														  // first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor sets count, ptr
+				0, nullptr												  // dynamic offsets count, ptr
+			);
 			// Camera descriptor set is still bound, but unused
 
 			// draw all instances:
@@ -2406,7 +2563,7 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 					.expose = float(expose),
 					.toneMapMode = int(toneMapMode),
 				};
-				vkCmdPushConstants(workspace.command_buffer, objects_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
+				vkCmdPushConstants(workspace.command_buffer, mirror_pipeline.layout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(tone), &tone);
 			}
 
 			{ // use object_vertices as vertex buffer binding 0:
@@ -2415,6 +2572,20 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 				vkCmdBindVertexBuffers(workspace.command_buffer, 0, uint32_t(vertex_buffers.size()), vertex_buffers.data(), offsets.data());
 			}
 
+			// bind Transforms descriptor set:
+			std::array<VkDescriptorSet, 2> descriptor_sets{
+				workspace.World_descriptors,	  // 0: World
+				workspace.Transforms_descriptors, // 1: Transforms
+			};
+
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,								  // command buffer
+				VK_PIPELINE_BIND_POINT_GRAPHICS,						  // pipeline bind point
+				mirror_pipeline.layout,									  // pipeline layout
+				0,														  // first set
+				uint32_t(descriptor_sets.size()), descriptor_sets.data(), // descriptor sets count, ptr
+				0, nullptr												  // dynamic offsets count, ptr
+			);
 			// World descriptor still bound
 
 			// Camera descriptor set is still bound, but unused
@@ -2455,7 +2626,20 @@ void Render::render(RTG &rtg_, RTG::RenderParams const &render_params)
 			}
 
 			// World descriptor still bound
+			std::array<VkDescriptorSet, 2> descriptor_sets{
+				workspace.World_descriptors,
+				workspace.Transforms_descriptors,
+			};
 
+			vkCmdBindDescriptorSets(
+				workspace.command_buffer,
+				VK_PIPELINE_BIND_POINT_GRAPHICS,
+				pbr_pipeline.layout,
+				0,
+				uint32_t(descriptor_sets.size()),
+				descriptor_sets.data(),
+				0,
+				nullptr);
 			// draw all instances:
 			uint32_t index_offset = uint32_t(lambertian_instances.size() + environment_instances.size() + mirror_instances.size()); // account for lambertian, environment, and mirror size
 			for (ObjectInstance const &inst : pbr_instances)
@@ -2888,7 +3072,6 @@ void Render::update(float dt)
 		sun_lights.clear();
 		sphere_lights.clear();
 		spot_lights.clear();
-		spot_light_from_world.clear();
 
 		glm::mat4x4 frustum_view_from_world = culling_camera == CameraMode::Scene ? view_from_world[0] : view_from_world[1];
 
@@ -3096,6 +3279,7 @@ void Render::update(float dt)
 					uint32_t instance_index = 0;
 					if (cur_material.material_type == Scene::Material::MaterialType::Environment)
 					{
+						instance_index = uint32_t(environment_instances.size());
 						environment_instances.emplace_back(ObjectInstance{
 							.vertices = mesh_vertices[cur_mesh_index],
 							.transform{
@@ -3108,6 +3292,7 @@ void Render::update(float dt)
 					}
 					else if (cur_material.material_type == Scene::Material::MaterialType::Mirror)
 					{
+						instance_index = uint32_t(mirror_instances.size());
 						mirror_instances.emplace_back(ObjectInstance{
 							.vertices = mesh_vertices[cur_mesh_index],
 							.transform{
@@ -3133,6 +3318,7 @@ void Render::update(float dt)
 					}
 					else if (cur_material.material_type == Scene::Material::MaterialType::PBR)
 					{
+						instance_index = uint32_t(pbr_instances.size());
 						pbr_instances.emplace_back(ObjectInstance{
 							.vertices = mesh_vertices[cur_mesh_index],
 							.transform{
@@ -3165,7 +3351,7 @@ void Render::update(float dt)
 					}
 					for (uint32_t frustum_i = 0; frustum_i < in_spot_light_instances.size(); ++frustum_i)
 					{
-						if (check_frustum_obb_intersection(light_frustums[i], obb))
+						if (check_frustum_obb_intersection(light_frustums[frustum_i], obb))
 						{
 							in_spot_light_instances[frustum_i][0].push_back(uint32_t(lambertian_instances.size()));
 						}

@@ -778,6 +778,7 @@ void Scene::load(std::string filename, std::optional<std::string> requested_came
                     {
                         shadow = uint32_t(shadow_res->second.as_number().value());
                     }
+                    lights[light_index].shadow = shadow;
                 }
 
                 // For sun
